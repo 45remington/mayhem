@@ -203,6 +203,160 @@ local hg_firstperson_ragdoll = CreateConVar("hg_firstperson_ragdoll", "0", FCVAR
 local hg_fov = CreateClientConVar("hg_fov", "70", true, false, "Change first-person field of view", 75, 100)
 local hg_gopro = CreateClientConVar("hg_gopro", "0", true, false, "Toggle GoPro-like camera view", 0, 1)
 local hg_thirdperson = CreateConVar("hg_thirdperson", "0", FCVAR_REPLICATED, "Toggle third-person camera view", 0, 1)
+local deathWhiteMat = Material("models/debug/debugwhite")
+surface.CreateFont("HGDeathCrooked", {
+	font = "Crooked",
+	size = ScreenScale(42),
+	weight = 500,
+	antialias = true
+})
+surface.CreateFont("HGDeathCrookedSmall", {
+	font = "Crooked",
+	size = ScreenScale(24),
+	weight = 500,
+	antialias = true
+})
+
+local deathMenuClick = false
+local deathMenuHover = {respawn = 0, spectate = 0}
+local deathMusic
+local deathMusicPlaying = false
+local deathMusicStart = 0
+local deathMusicFadeOut
+
+local function DeathScreenActive()
+	return IsValid(lply) and not lply:Alive()
+end
+
+local function DeathBody()
+	if not IsValid(lply) or lply:Alive() then return end
+	return IsValid(follow) and follow or IsValid(lply.OldRagdoll) and lply.OldRagdoll
+end
+
+hook.Add("PreDrawSkyBox", "DeathBlackSky", function()
+	if DeathBody() then return true end
+end)
+
+hook.Add("PreDrawOpaqueRenderables", "DeathBlackWorld", function(_, skybox)
+	if skybox then return end
+
+	local body = DeathBody()
+	if not body then return end
+
+	render.Clear(0, 0, 0, 255, true, true)
+	render.SuppressEngineLighting(true)
+	render.SetColorModulation(1, 1, 1)
+	render.MaterialOverride(deathWhiteMat)
+	body:DrawModel()
+	render.MaterialOverride()
+	render.SetColorModulation(1, 1, 1)
+	render.SuppressEngineLighting(false)
+
+	return true
+end)
+
+hook.Add("PreDrawTranslucentRenderables", "DeathBlackTranslucent", function()
+	if DeathBody() then return true end
+end)
+
+local woundHintColor = Color(255, 255, 255, 0)
+local woundHintAlpha = 0
+local function FakeWoundText(text)
+	local out = ""
+	local offset = math.floor(CurTime() * 4) % 2
+
+	for i = 1, #text do
+		local char = text:sub(i, i)
+		out = out .. (((i + offset) % 2 == 0) and char:upper() or char:lower())
+	end
+
+	return out
+end
+
+hook.Add("HUDPaint", "FakeWoundHint", function()
+	if not IsValid(lply) or not IsValid(lply.FakeRagdoll) then return end
+
+	local wounds = lply:GetNetVar("wounds")
+	local arterialwounds = lply:GetNetVar("arterialwounds")
+	if table.IsEmpty(wounds or {}) and table.IsEmpty(arterialwounds or {}) then return end
+
+	local holding = lply:KeyDown(IN_WALK) and lply:KeyDown(IN_USE)
+	local text = holding and FakeWoundText("holding wound. . .") or "hold alt+e to hold wound"
+	woundHintAlpha = LerpFT(0.08, woundHintAlpha, 145)
+	woundHintColor.a = woundHintAlpha
+
+	draw.SimpleText("[" .. text .. "]", "HomigradFontMedium", 24, ScrH() - 48, woundHintColor, TEXT_ALIGN_LEFT, TEXT_ALIGN_BOTTOM)
+end)
+
+hook.Add("PostRenderVGUI", "DeathMenu", function()
+	if not DeathScreenActive() then
+		gui.EnableScreenClicker(false)
+		deathMenuClick = false
+		if deathMusicPlaying and deathMusic then
+			deathMusicFadeOut = deathMusicFadeOut or CurTime()
+			local volume = 1 - math.Clamp((CurTime() - deathMusicFadeOut) / 2, 0, 1)
+			deathMusic:ChangeVolume(volume, 0)
+			if volume <= 0 then
+				deathMusic:Stop()
+				deathMusicPlaying = false
+				deathMusicFadeOut = nil
+			end
+		end
+		return
+	end
+
+	gui.EnableScreenClicker(true)
+	deathMusicFadeOut = nil
+	if not deathMusicPlaying then
+		deathMusic = deathMusic or CreateSound(lply, "death.mp3")
+		deathMusic:PlayEx(0, 100)
+		deathMusicStart = CurTime()
+		deathMusicPlaying = true
+	end
+	if deathMusic then deathMusic:ChangeVolume(math.Clamp((CurTime() - deathMusicStart) / 3, 0, 1), 0) end
+
+	local mx, my = gui.MousePos()
+	local cursorX = (mx - ScrW() / 2)
+	local cursorY = (my - ScrH() / 2)
+	local deadX = ScrW() / 2 + (mx - ScrW() / 2) * 0.025
+	local deadY = ScrH() * 0.09 + (my - ScrH() / 2) * 0.015
+	draw.SimpleText("DEAD.", "HGDeathCrooked", deadX + 3, deadY + 3, Color(255, 255, 255, 35), TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+	draw.SimpleText("DEAD.", "HGDeathCrooked", deadX, deadY, Color(255, 255, 255, 190), TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+
+	local buttons = {
+		respawn = {text = "respawn", x = ScrW() * 0.28, y = ScrH() * 0.66},
+		spectate = {text = "spectate", x = ScrW() * 0.72, y = ScrH() * 0.66}
+	}
+
+	surface.SetFont("HGDeathCrookedSmall")
+	for id, btn in pairs(buttons) do
+		local bx = btn.x + cursorX * 0.018
+		local by = btn.y + cursorY * 0.012
+		local tw, th = surface.GetTextSize(btn.text)
+		local hover = mx >= bx - tw / 2 and mx <= bx + tw / 2 and my >= by - th / 2 and my <= by + th / 2
+		deathMenuHover[id] = LerpFT(0.08, deathMenuHover[id], hover and 1 or 0)
+
+		local ghost = deathMenuHover[id]
+		draw.SimpleText(btn.text, "HGDeathCrookedSmall", bx + 2, by + 2, Color(255, 255, 255, 35), TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+		draw.SimpleText(btn.text, "HGDeathCrookedSmall", bx + math.sin(CurTime() * 9) * 4 * ghost, by + math.cos(CurTime() * 7) * 2 * ghost, Color(255, 255, 255, 55 * ghost), TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+		draw.SimpleText(btn.text, "HGDeathCrookedSmall", bx - math.cos(CurTime() * 8) * 3 * ghost, by + math.sin(CurTime() * 6) * 3 * ghost, Color(255, 255, 255, 40 * ghost), TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+		draw.SimpleText(btn.text, "HGDeathCrookedSmall", bx, by, Color(255, 255, 255, 170), TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+
+		local w = tw * deathMenuHover[id]
+		surface.SetDrawColor(255, 255, 255, 115)
+		surface.DrawRect(bx - w / 2, by + th / 2 + 6, w, 2)
+		surface.SetDrawColor(255, 255, 255, 45)
+		surface.DrawRect(bx - w / 2 - 3, by + th / 2 + 10, w, 2)
+		surface.DrawRect(bx - w / 2 + 3, by + th / 2 + 2, w, 2)
+
+		if id == "respawn" and hover and input.IsMouseDown(MOUSE_LEFT) and not deathMenuClick then
+			net.Start("HGDeathMenuRespawn")
+			net.SendToServer()
+		end
+	end
+
+	deathMenuClick = input.IsMouseDown(MOUSE_LEFT)
+end)
 
 local k = 0
 local wepPosLerp = Vector(0,0,0)
@@ -210,6 +364,8 @@ local CalcView
 local angleZero = Angle(0,0,0)
 
 local deathlerp = 0
+local deathViewOrigin
+local deathViewAngles
 local tblfollow = {}
 local lerpasad = 0
 local hg_allow_gopro = GetConVar("hg_allow_gopro_pos")
@@ -221,10 +377,12 @@ CalcView = function(ply, origin, angles, fov, znear, zfar)
 	lerpfovadd2 = LerpFT(0.1, lerpfovadd2, zooming and -25 or 0)
 	
 	if not lply:Alive() then
-		fakeTimer = fakeTimer or CurTime() + 30
+		fakeTimer = fakeTimer or CurTime() + 999999
+		LookX = 0
+		LookY = 0
 	end
 	
-	if not lply:Alive() and follow and ((fakeTimer < CurTime()) or lply:KeyPressed(IN_RELOAD) or lply:KeyPressed(IN_ATTACK) or lply:KeyPressed(IN_ATTACK2)) then
+if not lply:Alive() and follow and ((fakeTimer < CurTime()) or lply:KeyPressed(IN_RELOAD)) then
 		follow = nil
 
 		return
@@ -324,7 +482,7 @@ CalcView = function(ply, origin, angles, fov, znear, zfar)
 	hg.cam_things(ply, view, angleZero)
 	
 	if hg_thirdperson:GetBool() or hg.RagdollCombatInUse(ply) or (fakeTimer and fakeTimer > CurTime()) then
-		if hg_firstperson_death:GetBool() then
+		if hg_firstperson_death:GetBool() and ply:Alive() then
 			deathlerp = LerpFT(0.05,deathlerp,1)
 			local angdeath = LerpAngle(deathlerp,deathLocalAng,att_Ang)
 
@@ -341,7 +499,7 @@ CalcView = function(ply, origin, angles, fov, znear, zfar)
 
 			lerpasad = Lerp(0.1, lerpasad, (IsAimingNoScope(ply) and 0 or 1))
 
-			local ang = ply:EyeAngles()
+			local ang = ply:Alive() and ply:EyeAngles() or att_Ang
 			
 			if !hg_firstperson_ragdoll:GetBool() then
 				local tr = {}
@@ -359,6 +517,26 @@ CalcView = function(ply, origin, angles, fov, znear, zfar)
 		end
 	else
 		view.origin = pos
+	end
+
+	if not ply:Alive() then
+		local target = follow:LocalToWorld(follow:OBBCenter())
+		if not deathViewOrigin then
+			deathViewOrigin = Vector(view.origin[1], view.origin[2], view.origin[3])
+			if deathViewOrigin:DistToSqr(target) > 250000 then
+				deathViewOrigin = target - view.angles:Forward() * 120 + vector_up * 35
+			end
+		end
+		local targetAngles = (target - deathViewOrigin):Angle()
+		deathViewAngles = LerpAngleFT(0.08, deathViewAngles or targetAngles, targetAngles)
+		view.origin = deathViewOrigin
+		view.angles = deathViewAngles
+		view.fov = math.Clamp(hg_fov:GetFloat(),75,100) + lerpfovadd + lerpfovadd2
+		view.znear = 1
+		return view
+	else
+		deathViewOrigin = nil
+		deathViewAngles = nil
 	end
 	
 	view.angles:Add(ply:GetViewPunchAngles())
@@ -657,7 +835,7 @@ end
 hook.Add("Player_Death", "Fake", function(ply)		
 	if ply != lply then return end
 	
-	fakeTimer = CurTime() + 5
+	fakeTimer = CurTime() + 999999
 
 	hg.override[ply] = nil
 

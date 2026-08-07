@@ -165,10 +165,6 @@ function PLAYER:ScreenMessage(msg, kind)
     net.Send(self)
 end
 
-hook.Add("PlayerDeath", "HGDeathScreenMessage", function(ply)
-    ply:ScreenMessage("DECEASED", "death")
-end)
-
 function PLAYER:ResetNotification(key)
     ResetNotification(self,key)
 end

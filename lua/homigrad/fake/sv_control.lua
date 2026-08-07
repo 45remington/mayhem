@@ -134,6 +134,13 @@ local speedupbones = {
 
 local vecfive = Vector(5,5,5)
 
+local function GetFakeHoldWound(org)
+	local wound = org.arterialwounds and org.arterialwounds[#org.arterialwounds]
+	if wound then return wound, true end
+
+	return org.wounds and org.wounds[#org.wounds]
+end
+
 local player_GetHumans = player.GetHumans
 
 hook.Add("Think", "Fake", function()
@@ -321,7 +328,12 @@ hook.Add("Think", "Fake", function()
 		local back = ply:KeyDown(IN_BACK)
 		time = CurTime()
 		
-		if ply.organism and ply.organism.wounds and not table.IsEmpty(ply.organism.wounds) and org.canmove and (ply.fakecd and (ply.fakecd + 1) > CurTime()) then
+		local wound, arterial = GetFakeHoldWound(org)
+		local holdingWound = wound and org.canmove and ply:KeyDown(IN_WALK) and ply:KeyDown(IN_USE)
+		if holdingWound then
+			if IsValid(ragdoll.ConsLH) then ragdoll.ConsLH:Remove() ragdoll.ConsLH = nil end
+			if IsValid(ragdoll.ConsRH) then ragdoll.ConsRH:Remove() ragdoll.ConsRH = nil end
+
 			local tr = {}
 			tr.start = ragdoll:GetPos()
 			tr.endpos = ragdoll:GetPos() - vector_up * 60
@@ -329,37 +341,37 @@ hook.Add("Think", "Fake", function()
 			local tracehuy = util.TraceLine(tr)
 
 			if tracehuy.Hit then
-				local wounds = ply.organism.wounds
-				local wound = wounds[table.maxn(wounds) - 1] or wounds[table.maxn(wounds)]
-
 				if ragdoll:LookupBone(wound[4]) then
 					local pos, ang = LocalToWorld(wound[2], wound[3], ragdoll:GetBonePosition(ragdoll:LookupBone(wound[4])))
+					ragdoll.holdWoundPos = LerpVector(0.12, ragdoll.holdWoundPos or pos, pos)
+					pos = ragdoll.holdWoundPos
+					org.holdingWound = wound
+					org.holdingWoundArterial = arterial
+					org.holdingWoundUntil = CurTime() + 0.2
 					
-					if not ply:KeyDown(IN_ATTACK) and !left_arm[wound[4]] then
-						shadowControl(ragdoll, 3, 0.001, nil, nil, nil, spine:GetPos() + spine:GetAngles():Right() * -50, 25, 10)
-						shadowControl(ragdoll, 5, 0.001, nil, nil, nil, pos - (pos - lhand:GetPos()):GetNormalized() * 2, 100, 10)
+					shadowControl(ragdoll, 3, 0.05, nil, nil, nil, spine:GetPos() + spine:GetAngles():Right() * -50, 25, 10)
+					shadowControl(ragdoll, 5, 0.08, (pos - lhand:GetPos()):Angle(), 140, 40, pos - (pos - lhand:GetPos()):GetNormalized() * 2, 160, 30)
+
+					for i = 1, 4 do
+						if not ragdoll:LookupBone("ValveBiped.Bip01_L_Finger" .. tostring(i) .. "1") then continue end
+						ragdoll:ManipulateBoneAngles(ragdoll:LookupBone("ValveBiped.Bip01_L_Finger" .. tostring(i) .. "1"), Angle(0, -55, 0))
 					end
 
-					if not ply:KeyDown(IN_ATTACK2) and !right_arm[wound[4]] then
-						shadowControl(ragdoll, 2, 0.001, nil, nil, nil,spine:GetPos() + spine:GetAngles():Right() * -50, 25, 10)
-						shadowControl(ragdoll, 7, 0.001, nil, nil, nil, pos - (pos - rhand:GetPos()):GetNormalized() * 2, 100, 10)
-					end
-
-					if not ply:KeyDown(IN_USE) then
-						shadowControl(ragdoll, 10, 0.001, nil, nil, nil, ragdoll:GetPhysicsObjectNum(realPhysNum(ragdoll,8)):GetPos(), 40, 10)
-						shadowControl(ragdoll, 1, 0.001, nil, nil, nil, ragdoll:GetPhysicsObjectNum(realPhysNum(ragdoll,8)):GetPos(), 00, 10)
-						shadowControl(ragdoll, 2, 0.001, nil, nil, nil, ragdoll:GetPhysicsObjectNum(realPhysNum(ragdoll,8)):GetPos(), 0, 10)
-						shadowControl(ragdoll, 3, 0.001, nil, nil, nil, ragdoll:GetPhysicsObjectNum(realPhysNum(ragdoll,8)):GetPos(), 20, 10)
-						shadowControl(ragdoll, 11, 0.001, nil, nil, nil, spine:GetPos() + spine:GetAngles():Forward() * 50, 30, 10)
-						shadowControl(ragdoll, 8, 0.001, nil, nil, nil, spine:GetPos() + spine:GetAngles():Forward() * 50, 30, 10)
-					end
+					ragdoll.holdingWound = true
 				end
 			end
+		elseif ragdoll.holdingWound then
+			for i = 1, 4 do
+				if not ragdoll:LookupBone("ValveBiped.Bip01_L_Finger" .. tostring(i) .. "1") then continue end
+				ragdoll:ManipulateBoneAngles(ragdoll:LookupBone("ValveBiped.Bip01_L_Finger" .. tostring(i) .. "1"), Angle(0, 0, 0))
+			end
+
+			ragdoll.holdingWound = nil
 		end
 		
 		if not wep.RagdollFunc then
 			local force = math.max(1 - org.larm / 1.3, 0)
-			if !IsValid(ragdoll.ConsLH) and (ply:KeyDown(IN_ATTACK) and !ishgweapon(wep)) or (((ishgweapon(wep) and (!wep:IsResting() or ply:KeyDown(IN_FORWARD) or ply:KeyDown(IN_BACK))) or wep.ismelee2) and (ply:KeyDown(IN_USE) or ply:KeyDown(IN_ATTACK2))) then// || ply:InVehicle() then
+			if not holdingWound and (!IsValid(ragdoll.ConsLH) and (ply:KeyDown(IN_ATTACK) and !ishgweapon(wep)) or (((ishgweapon(wep) and (!wep:IsResting() or ply:KeyDown(IN_FORWARD) or ply:KeyDown(IN_BACK))) or wep.ismelee2) and (ply:KeyDown(IN_USE) or ply:KeyDown(IN_ATTACK2)))) then// || ply:InVehicle() then
 				if org.canmove then
 					//if !ply:InVehicle() then
 						ang2:Set(angles)
@@ -392,7 +404,7 @@ hook.Add("Think", "Fake", function()
 					mask = MASK_SOLID,
 				}).Hit
 			
-			if forward then
+			if forward and not holdingWound then
 				if IsValid(ragdoll.ConsRH) then
 					local hand = ragdoll:GetPhysicsObjectNum(ragdoll.ConsRH.Bone1)
 					local torso = ragdoll:GetPhysicsObjectNum(realPhysNum(ragdoll, 1))
@@ -438,7 +450,7 @@ hook.Add("Think", "Fake", function()
 				end
 			end
 
-			if back then
+			if back and not holdingWound then
 				if IsValid(ragdoll.ConsRH) then
 					local hand = ragdoll:GetPhysicsObjectNum(ragdoll.ConsRH.Bone1)
 					local torso = ragdoll:GetPhysicsObjectNum(realPhysNum(ragdoll, 1))
@@ -474,7 +486,7 @@ hook.Add("Think", "Fake", function()
 
 			local force = math.max(1 - org.rarm / 1.3, 0)
 
-			if !IsValid(ragdoll.ConsRH) and ply:KeyDown(IN_ATTACK2) or ((ishgweapon(wep) or wep.ismelee2) and ply:KeyDown(IN_USE)) then// || ply:InVehicle() then
+			if not holdingWound and (!IsValid(ragdoll.ConsRH) and ply:KeyDown(IN_ATTACK2) or ((ishgweapon(wep) or wep.ismelee2) and ply:KeyDown(IN_USE))) then// || ply:InVehicle() then
 				if org.canmove then
 					--if org.shock > 1 and not ply:KeyDown(IN_ATTACK2) then angles = spine:GetAngles() end
 					//if !ply:InVehicle() then
@@ -545,7 +557,7 @@ hook.Add("Think", "Fake", function()
 				ply:Notify( math.random(1,2) == 1 and "I'm at my limits here!" or "I can't hold much longer...", 25, "ragdoll_almostfall", 0, nil, Color(200, 55, 55))
 			end
 
-			if ply:KeyDown(IN_SPEED) and org.canmove and !org.larmamputated and (!ply.HandsStun or ply.HandsStun < CurTime()) then
+			if not holdingWound and ply:KeyDown(IN_SPEED) and org.canmove and !org.larmamputated and (!ply.HandsStun or ply.HandsStun < CurTime()) then
 				if IsValid(ragdoll.ConsLH) then
 					if hg_fake_stamina:GetBool() then
 						org.stamina.subadd = org.stamina.subadd + 0.06 * (ragdoll.staminaLeftModifyer or 0.5) * ( IsValid(ragdoll.ConsRH) and 0.35 or 1.25) * (on_ground and 0.25 or 1)
@@ -634,7 +646,7 @@ hook.Add("Think", "Fake", function()
 				end
 			end
 
-			if ply:KeyDown(IN_WALK) and org.canmove and !(ishgweapon(wep) or wep.ismelee2) and !org.rarmamputated and (!ply.HandsStun or ply.HandsStun < CurTime()) then
+			if not holdingWound and ply:KeyDown(IN_WALK) and org.canmove and !(ishgweapon(wep) or wep.ismelee2) and !org.rarmamputated and (!ply.HandsStun or ply.HandsStun < CurTime()) then
 				if IsValid(ragdoll.ConsRH) then
 					if hg_fake_stamina:GetBool() then
 						org.stamina.subadd = org.stamina.subadd + 0.06 * (ragdoll.staminaRightModifyer or 1) * ( IsValid(ragdoll.ConsLH) and 0.35 or 1.25) * (on_ground and 0.25 or 1)

@@ -113,7 +113,8 @@ module[2] = function(owner, org, mulTime)
 		for i, wound in pairs(org.wounds) do
 			local rand1 = math.Rand(4, 10) * 1
 			local rand2 = math.Rand(0.5, 1) * 1
-			local bleed = rand1 * wound[1] * mulTime * math.max(org.pulse, 20) / 70 * 2.0 * (1 - math.min(adrenaline / 6, 0.5)) * org.bleedingmul * 0.02
+			local holdmul = org.holdingWound == wound and (org.holdingWoundUntil or 0) > time and math.Clamp(wound[1] / 7, 0.25, 0.8) or 1
+			local bleed = rand1 * wound[1] * mulTime * math.max(org.pulse, 20) / 70 * 2.0 * (1 - math.min(adrenaline / 6, 0.5)) * org.bleedingmul * 0.02 * holdmul
 			local coagulate = 2 * mulTime * rand2 * (adrenaline * 0.1 + 1) * 0.04-- / #org.wounds
 			bleedoutspeed = bleedoutspeed + bleed / rand1 * 3--we pray for the luck of it being in the center
 			coagulatespeed = coagulatespeed + coagulate / rand2 * 1
@@ -149,12 +150,13 @@ module[2] = function(owner, org, mulTime)
 	local next_arterypump = 1 / math.max(org.pulse, 10)
 	local ent = owner:IsPlayer() and IsValid(owner.FakeRagdoll) and owner.FakeRagdoll or owner
 	for i, wound in pairs(org.arterialwounds) do
-		bleedoutspeed2 = bleedoutspeed2 + wound[1] * mulTime * 0.2 * math.max(org.pulse, 20) / 80
+		local holdmul = org.holdingWound == wound and (org.holdingWoundUntil or 0) > time and math.Clamp(wound[1] / 5, 0.45, 0.9) or 1
+		bleedoutspeed2 = bleedoutspeed2 + wound[1] * mulTime * 0.2 * math.max(org.pulse, 20) / 80 * holdmul
 
 		if wound[5] + next_arterypump * 2 < time then
 			local pos, ang = ent:GetBonePosition(ent:LookupBone(wound[4]))
 			wound[5] = time
-			org.blood = max(org.blood - wound[1] * mulTime * 4.5 * math.max(org.pulse, 20) / 80, 1)
+			org.blood = max(org.blood - wound[1] * mulTime * 4.5 * math.max(org.pulse, 20) / 80 * holdmul, 1)
 			if (owner:IsPlayer() and owner:Alive()) or not owner:IsPlayer() then
 				local dir = wound[6]
 				local len = dir:Length()

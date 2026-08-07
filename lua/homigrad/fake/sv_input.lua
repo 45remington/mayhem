@@ -1,5 +1,16 @@
 local cooldown = 0.5
 
+util.AddNetworkString("HGDeathMenuRespawn")
+
+net.Receive("HGDeathMenuRespawn", function(_, ply)
+	if ply:Alive() then return end
+	if ply.nextDeathMenuRespawn and ply.nextDeathMenuRespawn > CurTime() then return end
+
+	ply.nextDeathMenuRespawn = CurTime() + 1
+	ply.gottarespawn = true
+	ply:Spawn()
+end)
+
 concommand.Add("fake", function(ply)
 	if not ply:Alive() then return end
 	if ply.fakecd and ply.fakecd > CurTime() then return end
