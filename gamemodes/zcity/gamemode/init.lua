@@ -238,15 +238,45 @@ local hullscale = Vector(1, 1, 1)
 util.AddNetworkString("ZB_ChooseSpecPly")
 util.AddNetworkString("ZB_DeathGhost")
 
+local function IsDanceOfTheDead()
+	local round = CurrentRound and CurrentRound()
+	return round and round.name == "hmcd" and round.Type == "danceofthedead"
+end
+
+local function CheckDanceOfTheDeadWinner()
+	if not IsDanceOfTheDead() then return end
+
+	local ghosts = {}
+	for _, ply in player.Iterator() do
+		if ply:Alive() and ply:GetNWBool("DeathGhost") then ghosts[#ghosts + 1] = ply end
+	end
+
+	if #ghosts ~= 1 then return end
+	local winner = ghosts[1]
+	local pos = winner.DeathGhostBodyPos or winner:GetPos()
+	winner.DeathGhostSpawn = nil
+	winner.DeathGhostEliminated = nil
+	winner:SetNWBool("DeathGhost", false)
+	winner:Spawn()
+	winner:SetPos(pos)
+end
+
 local function ApplyDeathGhost(ply)
 	if not IsValid(ply) or not ply:GetNWBool("DeathGhost") then return end
 
-	ply:GodEnable()
 	ply:StripWeapons()
 	ply:SetMoveType(MOVETYPE_WALK)
 	ply:SetCollisionGroup(COLLISION_GROUP_PLAYER)
 	ply:SetRenderMode(RENDERMODE_TRANSALPHA)
 	ply:SetColor(Color(255, 255, 255, 90))
+
+	if IsDanceOfTheDead() then
+		ply:GodDisable()
+		local wep = ply:Give(math.random(2) == 1 and "weapon_hg_glassshard" or "weapon_pocketknife")
+		if IsValid(wep) then ply:SetActiveWeapon(wep) end
+	else
+		ply:GodEnable()
+	end
 end
 
 hook.Add("PlayerSpawn", "ZB_DeathGhost", function(ply)
@@ -259,6 +289,13 @@ hook.Add("PlayerSpawn", "ZB_DeathGhost", function(ply)
 end)
 
 hook.Add("PlayerDeath", "ZB_DeathGhost", function(ply)
+	if ply:GetNWBool("DeathGhost") and IsDanceOfTheDead() then
+		ply.DeathGhostEliminated = true
+		timer.Simple(0.2, CheckDanceOfTheDeadWinner)
+	elseif not ply:GetNWBool("DeathGhost") then
+		ply.DeathGhostBodyPos = ply:GetPos()
+	end
+
 	ply.DeathGhostSpawn = nil
 	ply:SetNWBool("DeathGhost", false)
 	ply:GodDisable()
@@ -268,6 +305,7 @@ end)
 
 net.Receive("ZB_DeathGhost", function(_, ply)
 	if ply:Alive() then return end
+    if ply.DeathGhostEliminated then return end
 
 	ply.DeathGhostSpawn = true
 	ply:Spawn()

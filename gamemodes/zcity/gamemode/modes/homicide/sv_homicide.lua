@@ -542,6 +542,9 @@ MODE.Types.gunfreezone = {
 }
 MODE.Types.gunfreezone = nil
 MODE.Types.wildwest = nil
+MODE.Types.danceofthedead = table.Copy(MODE.Types.standard)
+MODE.Types.danceofthedead.Chance = 0.08
+MODE.Types.danceofthedead.ChanceFunction = function() return zb.ModesChances["danceofthedead"] or zb.modes["hmcd"].Types.danceofthedead.Chance end
 
 MODE.Types.soe = {
 	Chance = 0.2,
@@ -634,8 +637,7 @@ MODE.Types.soe = {
 local modes = {
 	"soe",
 	"standard",
-	"wildwest",
-	"gunfreezone",
+	"danceofthedead",
 }
 
 util.AddNetworkString("HMCD_RoundStart")

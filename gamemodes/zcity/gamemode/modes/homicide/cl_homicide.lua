@@ -87,6 +87,7 @@ MODE.TypeNames = {
 	["gunfreezone"] = "Gun Free Zone",
 	["suicidelunatic"] = "Suicide Lunatic",
 	["wildwest"] = "Wild west",
+	["danceofthedead"] = "Dance of the Dead",
 	["supermario"] = "Super Mario"
 }
 
@@ -197,6 +198,8 @@ MODE.TypeObjectives.standard = {
 		color1 = Color(0,120,190)
 	},
 }
+
+MODE.TypeObjectives.danceofthedead = MODE.TypeObjectives.standard
 
 MODE.TypeObjectives.wildwest = {
 	traitor = {
@@ -331,12 +334,13 @@ function MODE:HUDPaint()
 	local roleText = lply.isTraitor and "You are a traitor." or "You are a innocent."
 	local roleColor = lply.isTraitor and Color(210, 25, 25, alpha) or Color(255, 255, 255, alpha)
 	local objective = lply.isTraitor and "Kill them, KILL THEM ALL" or "Be careful, you can never trust anyone."
+	local title = "Homicide | " .. (MODE.TypeNames[MODE.Type] or "Standard")
 
 	surface.SetDrawColor(0, 0, 0, 155 * math.min(fadeIn, fadeOut))
 	surface.DrawRect(-1, -1, sw + 2, sh + 2)
 
-	draw.SimpleText("Homicide", "ZB_HomicideRoundStart", x + 3, titleY + 3, Color(0,0,0, alpha * 0.75), TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
-	draw.SimpleText("Homicide", "ZB_HomicideRoundStart", x, titleY, Color(0,162,255, alpha), TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+	draw.SimpleText(title, "ZB_HomicideRoundStart", x + 3, titleY + 3, Color(0,0,0, alpha * 0.75), TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+	draw.SimpleText(title, "ZB_HomicideRoundStart", x, titleY, Color(0,162,255, alpha), TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
 
 	draw.SimpleText(roleText, "ZB_HomicideRoundStart", x + 3, roleY + 3, Color(0,0,0, alpha * 0.75), TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
 	draw.SimpleText(roleText, "ZB_HomicideRoundStart", x, roleY, roleColor, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
