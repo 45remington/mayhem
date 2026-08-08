@@ -78,6 +78,7 @@ local Selects = {
     {Title = "Achievements", Func = function(luaMenu,pp) 
         hg.DrawAchievmentsMenu(pp)
     end},
+    {Title = "Loadout", Func = function(luaMenu,pp) hg.DrawTraitorLoadout(pp, luaMenu) end},
     {Title = "Settings", Func = function(luaMenu,pp) 
         hg.DrawSettings(pp) 
     end},
@@ -88,6 +89,7 @@ local Selects = {
 local MarqueeSelectTitles = {
     "Discord",
     "Achievements",
+    "Loadout",
     "Settings",
     "Appearance",
     "Return",
@@ -218,6 +220,156 @@ surface.CreateFont("ZC_MM_Greeting", {
     antialias = true,
     extended = true
 })
+
+local traitorLoadoutItems = {
+	p22 = {name = "Walther P22", cost = 9, group = "weapon"},
+	usp = {name = "HK USP", cost = 13, group = "weapon"},
+	mag = {name = "Extra magazine", cost = 5},
+	suppressor = {name = "Suppressor", cost = 4},
+	knife = {name = "Pocket knife", cost = 3}
+}
+
+local function GetTraitorLoadout()
+	local data = util.JSONToTable(cookie.GetString("mayhem_traitor_loadout", "{}")) or {}
+	return data
+end
+
+local function SaveTraitorLoadout(data)
+	cookie.Set("mayhem_traitor_loadout", util.TableToJSON(data))
+	if engine.ActiveGamemode() == "zcity" then
+		net.Start("HMCD_TraitorLoadout")
+			net.WriteTable(data)
+		net.SendToServer()
+	end
+end
+
+local function TraitorLoadoutCost(data)
+	local cost = data.weapon and traitorLoadoutItems[data.weapon] and traitorLoadoutItems[data.weapon].cost or 0
+	if data.mag then cost = cost + traitorLoadoutItems.mag.cost end
+	if data.suppressor then cost = cost + traitorLoadoutItems.suppressor.cost end
+	if data.knife then cost = cost + traitorLoadoutItems.knife.cost end
+	return cost
+end
+
+function hg.DrawTraitorLoadout(pp)
+	pp:Clear()
+	pp:SetPos(0, 0)
+	pp:SetSize(ScrW(), ScrH())
+	local data = table.Copy(GetTraitorLoadout())
+	local points = 32
+	local controls = {}
+
+	pp.Paint = function(_, w, h)
+		surface.SetDrawColor(8, 8, 10, 245)
+		surface.DrawRect(0, 0, w, h)
+		surface.SetDrawColor(70, 10, 10, 110)
+		surface.DrawRect(0, 0, w, MenuScaleH(92))
+		surface.SetDrawColor(255, 255, 255, 18)
+		surface.DrawOutlinedRect(MenuScale(24), MenuScaleH(110), w - MenuScale(48), h - MenuScaleH(155), 1)
+	end
+
+	local title = vgui.Create("DLabel", pp)
+	title:SetFont("ZC_MM_Title")
+	title:SetText("TRAITOR LOADOUT")
+	title:SetTextColor(Color(255,255,255))
+	title:SetPos(MenuScale(34), MenuScaleH(28))
+	title:SizeToContents()
+
+	local pointsLabel = vgui.Create("DLabel", pp)
+	pointsLabel:SetFont("ZC_MM_MenuButtonMarquee")
+	pointsLabel:SetTextColor(Color(220,220,220))
+	pointsLabel:SetPos(ScrW() - MenuScale(210), MenuScaleH(42))
+
+	local function RefreshPoints()
+		pointsLabel:SetText("points: " .. tostring(TraitorLoadoutCost(data)) .. " / " .. points)
+		pointsLabel:SizeToContents()
+	end
+
+	local function CanToggle(key)
+		local copy = table.Copy(data)
+		copy[key] = not copy[key]
+		return TraitorLoadoutCost(copy) <= points
+	end
+
+	local function MakeButton(text, x, y, w, h, click, active, hidden)
+		local btn = vgui.Create("DButton", pp)
+		btn:SetText("")
+		btn:SetPos(x, y)
+		btn:SetSize(w, h)
+		btn.Lerp = 0
+		btn.DoClick = click
+		controls[#controls + 1] = btn
+		btn.Paint = function(self, bw, bh)
+			if hidden and hidden() then return end
+			self.Lerp = LerpFT(0.12, self.Lerp, (self:IsHovered() or active()) and 1 or 0)
+			surface.SetDrawColor(18, 18, 22, 230)
+			surface.DrawRect(0, 0, bw, bh)
+			surface.SetDrawColor(160, 20, 20, 45 + 100 * self.Lerp)
+			surface.DrawRect(0, 0, bw * self.Lerp, bh)
+			surface.SetDrawColor(255, 255, 255, 28 + 90 * self.Lerp)
+			surface.DrawOutlinedRect(0, 0, bw, bh, 1)
+			draw.SimpleText(active() and "[x]" or "[ ]", "ZC_MM_MenuButtonMarquee", MenuScale(10), bh / 2, Color(255,255,255, 180 + 75 * self.Lerp), TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER)
+			draw.SimpleText(text, "ZC_MM_MenuButtonMarquee", MenuScale(48), bh / 2, Color(255,255,255, 175 + 80 * self.Lerp), TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER)
+		end
+		btn.Think = function(self) if hidden then self:SetVisible(not hidden()) end end
+		return btn
+	end
+
+	MakeButton("Walther P22 - 9", MenuScale(52), MenuScaleH(145), MenuScale(285), MenuScaleH(38), function()
+		data.weapon = "p22"
+		RefreshPoints()
+	end, function() return data.weapon == "p22" end)
+
+	MakeButton("HK USP - 13", MenuScale(52), MenuScaleH(190), MenuScale(285), MenuScaleH(38), function()
+		data.weapon = "usp"
+		RefreshPoints()
+	end, function() return data.weapon == "usp" end)
+
+	for i, opt in ipairs({{"mag", "extra mag - 5"}, {"suppressor", "suppressor - 4"}}) do
+		local key, text = opt[1], opt[2]
+		MakeButton(text, MenuScale(375), MenuScaleH(145 + i * 44), MenuScale(285), MenuScaleH(34), function()
+			if not data[key] and not CanToggle(key) then return end
+			data[key] = not data[key]
+			RefreshPoints()
+		end, function() return data[key] end, function() return not data.weapon end)
+	end
+
+	MakeButton("pocket knife - 3", MenuScale(375), MenuScaleH(285), MenuScale(285), MenuScaleH(34), function()
+		if not data.knife and not CanToggle("knife") then return end
+		data.knife = not data.knife
+		RefreshPoints()
+	end, function() return data.knife end)
+
+	local function ActionButton(text, x, click)
+		local btn = vgui.Create("DButton", pp)
+		btn:SetText("")
+		btn:SetPos(x, ScrH() - MenuScaleH(72))
+		btn:SetSize(MenuScale(105), MenuScaleH(34))
+		btn.DoClick = click
+		btn.Paint = function(self, w, h)
+			local hover = self:IsHovered() and 1 or 0
+			surface.SetDrawColor(24, 24, 28, 235)
+			surface.DrawRect(0, 0, w, h)
+			surface.SetDrawColor(160, 20, 20, 60 + 80 * hover)
+			surface.DrawOutlinedRect(0, 0, w, h, 1)
+			draw.SimpleText(text, "ZC_MM_MenuButtonMarquee", w / 2, h / 2, Color(255,255,255,210 + 45 * hover), TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+		end
+	end
+
+	ActionButton("apply", ScrW() - MenuScale(485), function() SaveTraitorLoadout(data) end)
+	ActionButton("cancel", ScrW() - MenuScale(370), function() if luaMenu then luaMenu:ReturnToBaseMenu() end end)
+	ActionButton("clear", ScrW() - MenuScale(255), function() data = {} RefreshPoints() end)
+	ActionButton("x", ScrW() - MenuScale(140), function() if luaMenu then luaMenu:ReturnToBaseMenu() end end)
+
+	local hint = vgui.Create("DLabel", pp)
+	hint:SetFont("ZC_MM_StockText")
+	hint:SetText("Pick a pistol to show its attachments. Apply saves your loadout.")
+	hint:SetTextColor(Color(190,190,190))
+	hint:SetPos(MenuScale(56), ScrH() - MenuScaleH(72))
+	hint:SizeToContents()
+
+	RefreshPoints()
+end
 -- local Title = markup.Parse("error")
 
 local Pluv = Material("pluv/pluvkid.jpg")

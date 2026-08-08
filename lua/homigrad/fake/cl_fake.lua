@@ -218,7 +218,7 @@ surface.CreateFont("HGDeathCrookedSmall", {
 })
 
 local deathMenuClick = false
-local deathMenuHover = {respawn = 0, spectate = 0}
+local deathMenuHover = {respawn = 0, spectate = 0, freelook = 0}
 local deathMenuSpectating = false
 local deathMusic
 local deathMusicPlaying = false

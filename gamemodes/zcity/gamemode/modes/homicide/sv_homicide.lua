@@ -264,7 +264,6 @@ MODE.Types.standard = {
 	},
 	Message = "The murderer was ",
 	TraitorLoot = function(ply)
-		ply:Give("weapon_buck200knife")
 		ply:Give("weapon_hg_type59_tpik")
 		ply:Give("weapon_adrenaline")
 		ply:Give("weapon_hg_shuriken")
@@ -275,8 +274,7 @@ MODE.Types.standard = {
 		ply:Give("weapon_traitor_poison3")
 		ply:Give("weapon_traitor_poison_consumable")
 		ply:Give("weapon_traitor_suit")
-		local wep = ply:Give("weapon_zoraki")
-		timer.Simple(1,function() wep:ApplyAmmoChanges(2) end)
+		GiveTraitorLoadout(ply)
 
 		ply.organism.stamina.range = 220
 
@@ -557,9 +555,7 @@ MODE.Types.soe = {
 	},
 	Message = "The traitor was ",
 	TraitorLoot = function(ply)
-		local p22 = ply:Give("weapon_p22")
-		hg.AddAttachmentForce(ply,p22,"supressor4")
-		ply:Give("weapon_sogknife")
+		GiveTraitorLoadout(ply)
 		ply:Give("weapon_hg_type59_tpik")
 		ply:Give("weapon_walkie_talkie")
 		ply:Give("weapon_adrenaline")
@@ -640,6 +636,34 @@ local modes = {
 }
 
 util.AddNetworkString("HMCD_RoundStart")
+util.AddNetworkString("HMCD_TraitorLoadout")
+
+local traitorLoadoutCosts = {p22 = 9, usp = 13, mag = 5, suppressor = 4, knife = 3}
+local function SanitizeTraitorLoadout(data)
+	data = istable(data) and data or {}
+	local out = {weapon = (data.weapon == "usp" or data.weapon == "p22") and data.weapon or nil, mag = data.mag == true, suppressor = data.suppressor == true, knife = data.knife == true}
+	if not out.weapon then out.mag = false out.suppressor = false end
+	local cost = (out.weapon and traitorLoadoutCosts[out.weapon] or 0) + (out.mag and 5 or 0) + (out.suppressor and 4 or 0) + (out.knife and 3 or 0)
+	if cost > 32 then out.mag = false out.suppressor = false out.knife = false end
+	return out
+end
+
+net.Receive("HMCD_TraitorLoadout", function(_, ply)
+	ply.HMCDTraitorLoadout = SanitizeTraitorLoadout(net.ReadTable())
+end)
+
+local function GiveTraitorLoadout(ply)
+	local data = SanitizeTraitorLoadout(ply.HMCDTraitorLoadout)
+	if not data.weapon and not data.knife then return end
+	local class = data.weapon == "usp" and "weapon_hk_usp" or "weapon_p22"
+	local sup = data.weapon == "usp" and "supressor3" or "supressor4"
+	local wep = data.weapon and ply:Give(class)
+	if IsValid(wep) then
+		if data.suppressor then hg.AddAttachmentForce(ply, wep, sup) end
+		if data.mag then timer.Simple(1, function() if IsValid(wep) then ply:GiveAmmo(wep:GetMaxClip1(), wep:GetPrimaryAmmoType(), true) end end) end
+	end
+	if data.knife then ply:Give("weapon_pocketknife") end
+end
 
 function MODE:GetPlySpawn(ply)
 end
