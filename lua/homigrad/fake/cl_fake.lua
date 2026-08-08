@@ -356,7 +356,8 @@ hook.Add("PostRenderVGUI", "DeathMenu", function()
 	local gamemode = engine.ActiveGamemode()
 	local buttons = {}
 	if gamemode ~= "zcity" then buttons.respawn = {text = "respawn", x = gamemode == "sandbox" and ScrW() * 0.5 or ScrW() * 0.28, y = ScrH() * 0.66} end
-	if gamemode ~= "sandbox" then buttons.spectate = {text = "spectate", x = gamemode == "zcity" and ScrW() * 0.5 or ScrW() * 0.72, y = ScrH() * 0.66} end
+	if gamemode ~= "sandbox" then buttons.spectate = {text = "spectate", x = gamemode == "zcity" and ScrW() * 0.35 or ScrW() * 0.72, y = ScrH() * 0.66} end
+	if gamemode == "zcity" then buttons.freelook = {text = "free look", x = ScrW() * 0.65, y = ScrH() * 0.66} end
 
 	surface.SetFont("HGDeathCrookedSmall")
 	for id, btn in pairs(buttons) do
@@ -385,6 +386,10 @@ hook.Add("PostRenderVGUI", "DeathMenu", function()
 		elseif id == "spectate" and hover and input.IsMouseDown(MOUSE_LEFT) and not deathMenuClick and gamemode == "zcity" then
 			deathMenuSpectating = true
 			net.Start("ZB_DeathGhost")
+			net.SendToServer()
+		elseif id == "freelook" and hover and input.IsMouseDown(MOUSE_LEFT) and not deathMenuClick and gamemode == "zcity" then
+			deathMenuSpectating = true
+			net.Start("ZB_DeathFreeLook")
 			net.SendToServer()
 		end
 	end

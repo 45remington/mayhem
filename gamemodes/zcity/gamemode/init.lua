@@ -237,6 +237,7 @@ local hullscale = Vector(1, 1, 1)
 
 util.AddNetworkString("ZB_ChooseSpecPly")
 util.AddNetworkString("ZB_DeathGhost")
+util.AddNetworkString("ZB_DeathFreeLook")
 
 local function IsDanceOfTheDead()
 	local round = CurrentRound and CurrentRound()
@@ -279,11 +280,27 @@ local function ApplyDeathGhost(ply)
 	end
 end
 
+local function ApplyDeathFreeLook(ply)
+	if not IsValid(ply) then return end
+
+	ply:GodEnable()
+	ply:StripWeapons()
+	ply:SetMoveType(MOVETYPE_NOCLIP)
+	ply:SetCollisionGroup(COLLISION_GROUP_IN_VEHICLE)
+	ply:SetNoDraw(true)
+	ply:SetNWBool("DeathFreeLook", true)
+end
+
 hook.Add("PlayerSpawn", "ZB_DeathGhost", function(ply)
 	if ply.DeathGhostSpawn then timer.Simple(0, function() ApplyDeathGhost(ply) end) return end
+	if ply.DeathFreeLookSpawn then timer.Simple(0, function() ApplyDeathFreeLook(ply) end) return end
 
 	ply:SetNWBool("DeathGhost", false)
+	ply:SetNWBool("DeathFreeLook", false)
+	ply.DeathGhostEliminated = nil
+	ply.DeathGhostBodyPos = nil
 	ply:GodDisable()
+	ply:SetNoDraw(false)
 	ply:SetColor(color_white)
 	ply:SetRenderMode(RENDERMODE_NORMAL)
 end)
@@ -297,10 +314,37 @@ hook.Add("PlayerDeath", "ZB_DeathGhost", function(ply)
 	end
 
 	ply.DeathGhostSpawn = nil
+	ply.DeathFreeLookSpawn = nil
 	ply:SetNWBool("DeathGhost", false)
+	ply:SetNWBool("DeathFreeLook", false)
 	ply:GodDisable()
+	ply:SetNoDraw(false)
 	ply:SetColor(color_white)
 	ply:SetRenderMode(RENDERMODE_NORMAL)
+	timer.Simple(0, function()
+		if IsValid(ply) and IsValid(ply:GetRagdollEntity()) then ply:GetRagdollEntity():SetNoDraw(true) end
+	end)
+end)
+
+hook.Add("EntityTakeDamage", "ZB_DeathGhost", function(ent, dmg)
+	if not ent:IsPlayer() then return end
+
+	local attacker = dmg:GetAttacker()
+	local victimGhost = ent:GetNWBool("DeathGhost")
+	local attackerPlayer = IsValid(attacker) and (attacker:IsPlayer() and attacker or attacker.GetOwner and attacker:GetOwner())
+	local attackerGhost = IsValid(attackerPlayer) and attackerPlayer:IsPlayer() and attackerPlayer:GetNWBool("DeathGhost")
+	if not victimGhost and not attackerGhost then return end
+	if victimGhost and attackerGhost and IsDanceOfTheDead() then return end
+
+	return true
+end)
+
+hook.Add("PlayerCanPickupWeapon", "ZB_DeathGhost", function(ply)
+	if ply:GetNWBool("DeathGhost") or ply:GetNWBool("DeathFreeLook") then return false end
+end)
+
+hook.Add("PlayerUse", "ZB_DeathGhost", function(ply)
+	if ply:GetNWBool("DeathGhost") or ply:GetNWBool("DeathFreeLook") then return false end
 end)
 
 net.Receive("ZB_DeathGhost", function(_, ply)
@@ -314,6 +358,18 @@ net.Receive("ZB_DeathGhost", function(_, ply)
 		ply:SetNWBool("DeathGhost", true)
 		ApplyDeathGhost(ply)
 		ply.DeathGhostSpawn = nil
+	end)
+end)
+
+net.Receive("ZB_DeathFreeLook", function(_, ply)
+	if ply:Alive() then return end
+
+	ply.DeathFreeLookSpawn = true
+	ply:Spawn()
+	timer.Simple(0, function()
+		if not IsValid(ply) then return end
+		ApplyDeathFreeLook(ply)
+		ply.DeathFreeLookSpawn = nil
 	end)
 end)
 

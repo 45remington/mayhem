@@ -636,7 +636,6 @@ MODE.Types.soe = {
 
 local modes = {
 	"soe",
-	"standard",
 	"danceofthedead",
 }
 
