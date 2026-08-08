@@ -4,6 +4,7 @@ util.AddNetworkString("HGDeathMenuRespawn")
 
 net.Receive("HGDeathMenuRespawn", function(_, ply)
 	if ply:Alive() then return end
+	if engine.ActiveGamemode() == "zcity" then return end
 	if ply.nextDeathMenuRespawn and ply.nextDeathMenuRespawn > CurTime() then return end
 
 	ply.nextDeathMenuRespawn = CurTime() + 1

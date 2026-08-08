@@ -540,6 +540,8 @@ MODE.Types.gunfreezone = {
 		ply:SetNetVar("CurPluv", "pluvberet")
 	end
 }
+MODE.Types.gunfreezone = nil
+MODE.Types.wildwest = nil
 
 MODE.Types.soe = {
 	Chance = 0.2,

@@ -33,6 +33,17 @@ LoadFromDir("zcity/gamemode/libraries")
 
 zb.modesHooks = {}
 zb.modes = zb.modes or {}
+local removedModes = {
+	coop = true,
+	defense = true,
+	dm = true,
+	gwars = true,
+	hl2dm = true,
+	homicide_fear = true,
+	pathowogen = true,
+	scugarena = true,
+	sfd = true
+}
 
 local function addModeHook( MODE, hookName, func )
 	zb.modesHooks[MODE.name] = zb.modesHooks[MODE.name] or {}
@@ -130,12 +141,14 @@ local function LoadModes()
 
 	for _, v in ipairs(files) do
 		MODE = {}
+		if removedModes[string.StripExtension(v)] then continue end
 		IncluderFunc(directory .. "/" .. v)
 		InitMode()
 		MODE = nil
 	end
 
 	for _, v in ipairs(folders) do
+		if removedModes[v] then continue end
 		MODE = {}
 		LoadFromDir(directory .. "/" .. v)
 		InitMode()

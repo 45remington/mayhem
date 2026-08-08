@@ -236,6 +236,48 @@ RunConsoleCommand("mp_show_voice_icons", "0")
 local hullscale = Vector(1, 1, 1)
 
 util.AddNetworkString("ZB_ChooseSpecPly")
+util.AddNetworkString("ZB_DeathGhost")
+
+local function ApplyDeathGhost(ply)
+	if not IsValid(ply) or not ply:GetNWBool("DeathGhost") then return end
+
+	ply:GodEnable()
+	ply:StripWeapons()
+	ply:SetMoveType(MOVETYPE_WALK)
+	ply:SetCollisionGroup(COLLISION_GROUP_PLAYER)
+	ply:SetRenderMode(RENDERMODE_TRANSALPHA)
+	ply:SetColor(Color(255, 255, 255, 90))
+end
+
+hook.Add("PlayerSpawn", "ZB_DeathGhost", function(ply)
+	if ply.DeathGhostSpawn then timer.Simple(0, function() ApplyDeathGhost(ply) end) return end
+
+	ply:SetNWBool("DeathGhost", false)
+	ply:GodDisable()
+	ply:SetColor(color_white)
+	ply:SetRenderMode(RENDERMODE_NORMAL)
+end)
+
+hook.Add("PlayerDeath", "ZB_DeathGhost", function(ply)
+	ply.DeathGhostSpawn = nil
+	ply:SetNWBool("DeathGhost", false)
+	ply:GodDisable()
+	ply:SetColor(color_white)
+	ply:SetRenderMode(RENDERMODE_NORMAL)
+end)
+
+net.Receive("ZB_DeathGhost", function(_, ply)
+	if ply:Alive() then return end
+
+	ply.DeathGhostSpawn = true
+	ply:Spawn()
+	timer.Simple(0, function()
+		if not IsValid(ply) then return end
+		ply:SetNWBool("DeathGhost", true)
+		ApplyDeathGhost(ply)
+		ply.DeathGhostSpawn = nil
+	end)
+end)
 
 net.Receive("ZB_ChooseSpecPly",function(len,ply)
 	if ply:Alive() then return end

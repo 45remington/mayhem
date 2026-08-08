@@ -7,6 +7,11 @@ if CLIENT then
     zb.nextround = zb.nextround or nil
     local queuePanelInstance = nil 
     local selectedModes = {}
+    local untoggleableModes = {
+        ["tdm"] = true,
+        ["cstrike"] = true,
+        ["criresp"] = true,
+    }
 
     net.Receive("ZB_SendModesInfo", function()
         zb.availableModes = net.ReadTable()
@@ -132,6 +137,7 @@ if CLIENT then
         else
 
             modePanel.OnMousePressed = function()
+                if untoggleableModes[mode.key] then return end
                 modePanel.Selected = not modePanel.Selected
                 selectedModes[mode.key] = modePanel.Selected
                 
@@ -307,8 +313,8 @@ if CLIENT then
             local modeBtn = CreateModeItem(dscroll, mode)
             table.insert(modeItems, modeBtn)
             
-            modeBtn:SetCursor("hand")
-            modeBtn:SetTooltip("Click to select/unselect mode")
+            modeBtn:SetCursor(untoggleableModes[mode.key] and "arrow" or "hand")
+            modeBtn:SetTooltip(untoggleableModes[mode.key] and "This mode cannot be toggled" or "Click to select/unselect mode")
             
             local inQueue = false
             for _, queuedModeKey in ipairs(zb.RoundList) do

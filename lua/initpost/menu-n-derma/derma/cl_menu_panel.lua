@@ -134,21 +134,21 @@ local splasheh = {
 
 --print(string.upper('I wish you good health, Jason Statham'))
 surface.CreateFont("ZC_MM_Title", {
-    font = "tt_kp",
+    font = "Tt-Kp Medium",
     size = MenuScale(40),
     weight = 500,
     antialias = true
 })
 
 surface.CreateFont("ZC_MM_TitleHuge", {
-    font = "tt_kp",
+    font = "Tt-Kp Medium",
     size = MenuScale(74),
     weight = 500,
     antialias = true
 })
 
 surface.CreateFont("ZC_MM_MenuButton", {
-    font = "tt_kp",
+    font = "Tt-Kp Medium",
     size = MenuScale(11),
     weight = 500,
     antialias = true,
@@ -156,9 +156,17 @@ surface.CreateFont("ZC_MM_MenuButton", {
 })
 
 surface.CreateFont("ZC_MM_MenuButtonMarquee", {
-    font = "tt_kp",
+    font = "Tt-Kp Medium",
     size = MenuScale(13),
     weight = 650,
+    antialias = true,
+    extended = true
+})
+
+surface.CreateFont("ZC_MM_MenuButtonMarqueePop", {
+    font = "Tt-Kp Medium",
+    size = MenuScale(15),
+    weight = 750,
     antialias = true,
     extended = true
 })
@@ -939,6 +947,10 @@ function PANEL:Init()
 
     PopulateMarqueeDock(self.ButtonDock, self.Buttons)
     PopulateMarqueeDock(self.ButtonDockWrap, wrapButtons)
+	self.ButtonDock.VerticalMenu = true
+	self.ButtonDock:SetPos(MenuScale(28), MenuScaleH(178))
+	self.ButtonDock:SetSize(MenuScale(205), MenuScaleH(250))
+	self.ButtonDockWrap:SetVisible(false)
 
     local gap = MenuScale(10)
     local totalWide = 0
@@ -955,6 +967,11 @@ function PANEL:Init()
     self.MenuMarqueeLastUpdate = RealTime()
     self.ButtonDock:SetPos(0, ScrH() - MenuScaleH(22))
     self.ButtonDockWrap:SetPos(-(totalWide + gap), ScrH() - MenuScaleH(22))
+	if self.ButtonDock.VerticalMenu then
+		self.ButtonDock:SetPos(MenuScale(28), MenuScaleH(178))
+		self.ButtonDock:SetSize(MenuScale(205), MenuScaleH(250))
+		self.ButtonDockWrap:SetVisible(false)
+	end
     self.MenuTextTravelStart = RealTime()
     function self:IsMenuMarqueeHovered()
         for _, button in ipairs(self.Buttons or {}) do
@@ -977,6 +994,11 @@ function PANEL:Init()
         if not IsValid(parent) or not IsValid(wrap) then
             return
         end
+		if self.VerticalMenu then
+			self:SetPos(MenuScale(28), MenuScaleH(178))
+			wrap:SetVisible(false)
+			return
+		end
 
         local y = ScrH() - MenuScaleH(22)
         local speed = parent.MenuMarqueeSpeed or 0
@@ -1256,9 +1278,9 @@ function PANEL:AddSelect( pParent, strTitle, tbl )
     btn:SizeToContents()
     btn:SetFont( btnFont )
     btn.MenuFont = btnFont
-    btn:SetTall( marqueeButton and MenuScaleH( 20 ) or MenuScaleH( 16 ) )
-    btn:Dock(LEFT)
-    btn:DockMargin(0,0,marqueeButton and MenuScale(10) or MenuScale(4),0)
+    btn:SetTall( marqueeButton and MenuScaleH( 22 ) or MenuScaleH( 16 ) )
+    btn:Dock(marqueeButton and TOP or LEFT)
+    btn:DockMargin(0, 0, marqueeButton and 0 or MenuScale(4), marqueeButton and MenuScaleH(2) or 0)
     btn.Func = tbl.Func
     btn.HoveredFunc = tbl.HoveredFunc
     local luaMenu = self 
@@ -1270,6 +1292,7 @@ function PANEL:AddSelect( pParent, strTitle, tbl )
     local textW = surface.GetTextSize(displayText)
     btn:SetWide(textW + (marqueeButton and MenuScale(10) or MenuScale(6)))
     function btn:DoClick()
+        self.ClickPulse = CurTime() + 0.25
         -- ,kz оптимизировать надо, но идёт ошибка(кэшировать бы luaMenu.panelparrent вместо вызова его каждый раз)
         if curent_panel == string.lower(strTitle) then
 			for i = 1, 3 do
@@ -1320,16 +1343,23 @@ function PANEL:AddSelect( pParent, strTitle, tbl )
         local hovered = self:IsHovered()
         local displayTitle = string.lower(hg.MenuTranslate(strTitle))
         local displayText = "[" .. displayTitle .. "];"
+        local pop = self.PopAnim or 0
+        local font = pop > 0.45 and "ZC_MM_MenuButtonMarqueePop" or (self.MenuFont or "ZC_MM_MenuButton")
         local textCol = active and Color(255, 255, 255) or hovered and Color(255, 255, 255) or Color(235, 235, 235, 210)
-        draw.SimpleText(displayText, self.MenuFont or "ZC_MM_MenuButton", 0, h / 2, textCol, TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER)
+		draw.SimpleText(displayText, font, MenuScale(10) * pop + 2, h / 2 + 2, Color(0, 0, 0, 90), TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER)
+        draw.SimpleText(displayText, font, MenuScale(10) * pop, h / 2, textCol, TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER)
     end
 
     function btn:Think()
-        surface.SetFont(self.MenuFont or "ZC_MM_MenuButton")
+        local active = curent_panel == string.lower(strTitle) and strTitle ~= "Traitor Role"
+        local clicked = (self.ClickPulse or 0) > CurTime()
+        self.PopAnim = LerpFT(0.12, self.PopAnim or 0, (self:IsHovered() or active or clicked) and 1 or 0)
+        surface.SetFont(self.PopAnim > 0.45 and "ZC_MM_MenuButtonMarqueePop" or (self.MenuFont or "ZC_MM_MenuButton"))
         local displayTitle = string.lower(hg.MenuTranslate(strTitle))
         local displayText = "[" .. displayTitle .. "];"
         local textW = surface.GetTextSize(displayText)
-        self:SetWide(textW + (marqueeButton and MenuScale(10) or MenuScale(6)))
+        self:SetWide(textW + (marqueeButton and MenuScale(30) or MenuScale(6)))
+		if marqueeButton then self:SetTall(MenuScaleH(22) + MenuScaleH(12) * (self.PopAnim or 0)) end
         self:SetTextColor(self.RColor)
     end
 end

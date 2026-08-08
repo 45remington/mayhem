@@ -219,16 +219,19 @@ surface.CreateFont("HGDeathCrookedSmall", {
 
 local deathMenuClick = false
 local deathMenuHover = {respawn = 0, spectate = 0}
+local deathMenuSpectating = false
 local deathMusic
 local deathMusicPlaying = false
 local deathMusicStart = 0
 local deathMusicFadeOut
 
 local function DeathScreenActive()
-	return IsValid(lply) and not lply:Alive()
+	if IsValid(lply) and lply:Alive() then deathMenuSpectating = false end
+	return IsValid(lply) and not lply:Alive() and not deathMenuSpectating
 end
 
 local function DeathBody()
+	if not DeathScreenActive() then return end
 	if not IsValid(lply) or lply:Alive() then return end
 	return IsValid(follow) and follow or IsValid(lply.OldRagdoll) and lply.OldRagdoll
 end
@@ -259,11 +262,29 @@ hook.Add("PreDrawTranslucentRenderables", "DeathBlackTranslucent", function()
 	if DeathBody() then return true end
 end)
 
+hook.Add("PrePlayerDraw", "DeathGhostDraw", function(ply)
+	if not ply:GetNWBool("DeathGhost") then return end
+	if IsValid(lply) and not lply:GetNWBool("DeathGhost") then return true end
+
+	render.SetBlend(0.35)
+end)
+
+hook.Add("PostPlayerDraw", "DeathGhostDraw", function(ply)
+	if ply:GetNWBool("DeathGhost") then render.SetBlend(1) end
+end)
+
+hook.Add("HUDPaint", "DeathGhostVignette", function()
+	if not IsValid(lply) or not lply:GetNWBool("DeathGhost") then return end
+
+	surface.SetDrawColor(120, 0, 0, 70)
+	surface.DrawRect(0, 0, ScrW(), ScrH())
+end)
+
 local woundHintColor = Color(255, 255, 255, 0)
 local woundHintAlpha = 0
 local function FakeWoundText(text)
 	local out = ""
-	local offset = math.floor(CurTime() * 4) % 2
+	local offset = math.floor(CurTime() * 2.5) % 2
 
 	for i = 1, #text do
 		local char = text:sub(i, i)
@@ -285,6 +306,11 @@ hook.Add("HUDPaint", "FakeWoundHint", function()
 	woundHintAlpha = LerpFT(0.08, woundHintAlpha, 145)
 	woundHintColor.a = woundHintAlpha
 
+	if holding then
+		local glow = 55 + math.sin(CurTime() * 4) * 25
+		draw.SimpleText("[" .. text .. "]", "HomigradFontMedium", 26, ScrH() - 46, Color(180, 40, 40, glow), TEXT_ALIGN_LEFT, TEXT_ALIGN_BOTTOM)
+		draw.SimpleText("[" .. text .. "]", "HomigradFontMedium", 22, ScrH() - 50, Color(180, 40, 40, glow * 0.6), TEXT_ALIGN_LEFT, TEXT_ALIGN_BOTTOM)
+	end
 	draw.SimpleText("[" .. text .. "]", "HomigradFontMedium", 24, ScrH() - 48, woundHintColor, TEXT_ALIGN_LEFT, TEXT_ALIGN_BOTTOM)
 end)
 
@@ -295,7 +321,7 @@ hook.Add("PostRenderVGUI", "DeathMenu", function()
 		if deathMusicPlaying and deathMusic then
 			deathMusicFadeOut = deathMusicFadeOut or CurTime()
 			local volume = 1 - math.Clamp((CurTime() - deathMusicFadeOut) / 2, 0, 1)
-			deathMusic:ChangeVolume(volume, 0)
+			deathMusic:SetVolume(volume)
 			if volume <= 0 then
 				deathMusic:Stop()
 				deathMusicPlaying = false
@@ -308,12 +334,16 @@ hook.Add("PostRenderVGUI", "DeathMenu", function()
 	gui.EnableScreenClicker(true)
 	deathMusicFadeOut = nil
 	if not deathMusicPlaying then
-		deathMusic = deathMusic or CreateSound(lply, "death.mp3")
-		deathMusic:PlayEx(0, 100)
 		deathMusicStart = CurTime()
 		deathMusicPlaying = true
+		sound.PlayFile("sound/death.mp3", "noplay", function(chan)
+			if not IsValid(chan) then return end
+			deathMusic = chan
+			deathMusic:SetVolume(0)
+			deathMusic:Play()
+		end)
 	end
-	if deathMusic then deathMusic:ChangeVolume(math.Clamp((CurTime() - deathMusicStart) / 3, 0, 1), 0) end
+	if deathMusic then deathMusic:SetVolume(math.Clamp((CurTime() - deathMusicStart) / 3, 0, 1)) end
 
 	local mx, my = gui.MousePos()
 	local cursorX = (mx - ScrW() / 2)
@@ -323,10 +353,10 @@ hook.Add("PostRenderVGUI", "DeathMenu", function()
 	draw.SimpleText("DEAD.", "HGDeathCrooked", deadX + 3, deadY + 3, Color(255, 255, 255, 35), TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
 	draw.SimpleText("DEAD.", "HGDeathCrooked", deadX, deadY, Color(255, 255, 255, 190), TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
 
-	local buttons = {
-		respawn = {text = "respawn", x = ScrW() * 0.28, y = ScrH() * 0.66},
-		spectate = {text = "spectate", x = ScrW() * 0.72, y = ScrH() * 0.66}
-	}
+	local gamemode = engine.ActiveGamemode()
+	local buttons = {}
+	if gamemode ~= "zcity" then buttons.respawn = {text = "respawn", x = gamemode == "sandbox" and ScrW() * 0.5 or ScrW() * 0.28, y = ScrH() * 0.66} end
+	if gamemode ~= "sandbox" then buttons.spectate = {text = "spectate", x = gamemode == "zcity" and ScrW() * 0.5 or ScrW() * 0.72, y = ScrH() * 0.66} end
 
 	surface.SetFont("HGDeathCrookedSmall")
 	for id, btn in pairs(buttons) do
@@ -351,6 +381,10 @@ hook.Add("PostRenderVGUI", "DeathMenu", function()
 
 		if id == "respawn" and hover and input.IsMouseDown(MOUSE_LEFT) and not deathMenuClick then
 			net.Start("HGDeathMenuRespawn")
+			net.SendToServer()
+		elseif id == "spectate" and hover and input.IsMouseDown(MOUSE_LEFT) and not deathMenuClick and gamemode == "zcity" then
+			deathMenuSpectating = true
+			net.Start("ZB_DeathGhost")
 			net.SendToServer()
 		end
 	end
@@ -522,10 +556,7 @@ if not lply:Alive() and follow and ((fakeTimer < CurTime()) or lply:KeyPressed(I
 	if not ply:Alive() then
 		local target = follow:LocalToWorld(follow:OBBCenter())
 		if not deathViewOrigin then
-			deathViewOrigin = Vector(view.origin[1], view.origin[2], view.origin[3])
-			if deathViewOrigin:DistToSqr(target) > 250000 then
-				deathViewOrigin = target - view.angles:Forward() * 120 + vector_up * 35
-			end
+			deathViewOrigin = target - view.angles:Forward() * 95 + vector_up * 28
 		end
 		local targetAngles = (target - deathViewOrigin):Angle()
 		deathViewAngles = LerpAngleFT(0.08, deathViewAngles or targetAngles, targetAngles)
@@ -835,6 +866,7 @@ end
 hook.Add("Player_Death", "Fake", function(ply)		
 	if ply != lply then return end
 	
+	deathMenuSpectating = false
 	fakeTimer = CurTime() + 999999
 
 	hg.override[ply] = nil
