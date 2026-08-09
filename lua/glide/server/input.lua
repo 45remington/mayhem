@@ -169,25 +169,9 @@ local function HandleInput( ply, button, active, pressed )
 
     -- Is this a "switch seat" button?
     if pressed and SEAT_SWITCH_BUTTONS[button] then
-        -- Let the driver lock the vehicle
-        /*if ply:KeyDown( IN_WALK ) then
-            if ply ~= vehicle:GetDriver() then return end
-
-            if Glide.CanLockVehicle( ply, vehicle ) then
-                vehicle:SetLocked( not vehicle:GetIsLocked() )
-            else
-                Glide.SendNotification( ply, {
-                    text = "#glide.notify.lock_denied",
-                    icon = "materials/icon16/cancel.png",
-                    sound = "glide/ui/radar_alert.wav",
-                    immediate = true
-                } )
-            end
-        else*/
         if ply:KeyDown( IN_WALK ) then
             Glide.SwitchSeat( ply, SEAT_SWITCH_BUTTONS[button] )
         end
-        //end
 
         return
     end
@@ -204,10 +188,28 @@ local function HandleInput( ply, button, active, pressed )
         return
     end
 
+    local org = ply.organism
+    local noLArm = org and org.larmamputated
+    local noRArm = org and org.rarmamputated
+    local noArms = noLArm and noRArm
+
     for _, action in ipairs( actions ) do
         if settings.replaceYawWithRoll and MOUSE_ACTION_OVERRIDE[action] then
             action = MOUSE_ACTION_OVERRIDE[action]
         end
+
+        local isSteerOrMvmt =
+            action == "steer_left" or action == "steer_right" or
+            action == "accelerate" or action == "brake" or action == "handbrake" or
+            action == "throttle_modifier" or
+            action == "pitch_up" or action == "pitch_down" or
+            action == "yaw_left" or action == "yaw_right" or
+            action == "roll_left" or action == "roll_right" or
+            action == "lean_forward" or action == "lean_back" or
+            action == "shift_up" or action == "shift_down" or action == "shift_neutral"
+
+        if isSteerOrMvmt and (noLArm or noArms) then continue end
+        if action == "attack" and (noRArm or noArms) then continue end
 
         vehicle:SetInputBool( active.seatIndex, ACTION_ALIASES[action] or action, pressed )
     end
@@ -231,6 +233,10 @@ local function HandleMouseInput( ply, active, dt )
     local vehType = vehTbl.VehicleType
     local seatIndex = active.seatIndex
 
+    local org = ply.organism
+    local noLArm = org and org.larmamputated
+    local noArms = noLArm and org and org.rarmamputated
+
     -- If this vehicle is not an aircraft
     if vehType ~= 3 and vehType ~= 4 then
         -- Glide.MOUSE_STEER_MODE.AIM
@@ -238,22 +244,26 @@ local function HandleMouseInput( ply, active, dt )
             local phys = vehicle:GetPhysicsObject()
             if not IsValid( phys ) then return end
 
-            local angVel = phys:GetAngleVelocity()
-            local targetDir = ply:GlideGetAimPos() - phys:GetPos()
-            targetDir:Normalize()
+            local steer = 0
 
-            local steerDrag = Clamp( angVel[3] * 0.1, -2, 2 ) * dt * 3
-            local steer = Clamp( ( targetDir:Dot( vehicle:GetRight() ) * 3 ) + steerDrag, -1, 1 )
+            if not (noLArm or noArms) then
+                local angVel = phys:GetAngleVelocity()
+                local targetDir = ply:GlideGetAimPos() - phys:GetPos()
+                targetDir:Normalize()
 
-            if vehicle:GetInputBool( 1, "free_look" ) then
-                steer = 0
+                local steerDrag = Clamp( angVel[3] * 0.1, -2, 2 ) * dt * 3
+                steer = Clamp( ( targetDir:Dot( vehicle:GetRight() ) * 3 ) + steerDrag, -1, 1 )
+
+                if vehicle:GetInputBool( 1, "free_look" ) then
+                    steer = 0
+                end
             end
 
             vehicle:SetInputFloat( seatIndex, "steer", steer )
 
         -- Glide.MOUSE_STEER_MODE.DIRECT
         elseif settings.mouseSteerMode == 2 then
-            vehicle:SetInputFloat( seatIndex, "steer", ply:GetInfoNum( "glide_input_pitch", 0 ) )
+            vehicle:SetInputFloat( seatIndex, "steer", (noLArm or noArms) and 0 or ply:GetInfoNum( "glide_input_pitch", 0 ) )
         end
 
         -- Don't run the logic below this
@@ -269,19 +279,24 @@ local function HandleMouseInput( ply, active, dt )
         local phys = vehicle:GetPhysicsObject()
         if not IsValid( phys ) then return end
 
-        local angVel = phys:GetAngleVelocity()
-        local targetDir = ply:GlideGetCameraAngles():Forward()
+        local pitch = 0
+        local rudder = 0
 
-        local pitchDrag = Clamp( angVel[2] * -0.1, -3, 3 ) * dt * 40
-        local rudderDrag = Clamp( angVel[3] * 0.1, -3, 3 ) * dt * 40
+        if not (noLArm or noArms) then
+            local angVel = phys:GetAngleVelocity()
+            local targetDir = ply:GlideGetCameraAngles():Forward()
 
-        local mult = vehTbl.VehicleType == 4 and 15 or 8
-        local pitch = Clamp( ( targetDir:Dot( vehicle:GetUp() ) * -mult ) + pitchDrag, -1, 1 )
-        local rudder = Clamp( ( targetDir:Dot( vehicle:GetRight() ) * mult ) + rudderDrag, -1, 1 )
+            local pitchDrag = Clamp( angVel[2] * -0.1, -3, 3 ) * dt * 40
+            local rudderDrag = Clamp( angVel[3] * 0.1, -3, 3 ) * dt * 40
 
-        if vehicle:GetInputBool( 1, "free_look" ) then
-            pitch = 0
-            rudder = 0
+            local mult = vehTbl.VehicleType == 4 and 15 or 8
+            pitch = Clamp( ( targetDir:Dot( vehicle:GetUp() ) * -mult ) + pitchDrag, -1, 1 )
+            rudder = Clamp( ( targetDir:Dot( vehicle:GetRight() ) * mult ) + rudderDrag, -1, 1 )
+
+            if vehicle:GetInputBool( 1, "free_look" ) then
+                pitch = 0
+                rudder = 0
+            end
         end
 
         vehicle:SetInputFloat( seatIndex, "pitch", pitch )
@@ -289,10 +304,10 @@ local function HandleMouseInput( ply, active, dt )
 
     -- Glide.MOUSE_FLY_MODE.DIRECT
     elseif settings.mouseFlyMode == 1 then
-
-        vehicle:SetInputFloat( seatIndex, "pitch", ply:GetInfoNum( "glide_input_pitch", 0 ) )
-        vehicle:SetInputFloat( seatIndex, "yaw", ply:GetInfoNum( "glide_input_yaw", 0 ) )
-        vehicle:SetInputFloat( seatIndex, "roll", ply:GetInfoNum( "glide_input_roll", 0 ) )
+        local disabled = (noLArm or noArms)
+        vehicle:SetInputFloat( seatIndex, "pitch", disabled and 0 or ply:GetInfoNum( "glide_input_pitch", 0 ) )
+        vehicle:SetInputFloat( seatIndex, "yaw", disabled and 0 or ply:GetInfoNum( "glide_input_yaw", 0 ) )
+        vehicle:SetInputFloat( seatIndex, "roll", disabled and 0 or ply:GetInfoNum( "glide_input_roll", 0 ) )
 
     end
 end

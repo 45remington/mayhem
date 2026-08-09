@@ -456,12 +456,17 @@ function SWEP:CanPrimaryAttack()
 		return false
 	end
 
-	//local owner = self:GetOwner()
-	--[[if owner.suiciding then
-		if (owner:GetNetVar("suicide_time",CurTime()) + 8) < CurTime() then if SERVER then owner:SetNetVar("suicide_time",nil) end return true end
-		if SERVER and owner:KeyPressed(IN_ATTACK) then owner:SetNetVar("suicide_time",owner:GetNetVar("suicide_time",CurTime()) - 0.5) end
-		return false
-	end--]]
+	if owner:IsPlayer() and owner:InVehicle() then
+		local org = owner.organism
+		local veh = owner.GlideGetVehicle and owner:GlideGetVehicle() or owner:GetVehicle()
+		local parentVeh = IsValid(veh) and IsValid(veh:GetParent()) and veh:GetParent() or nil
+		local glideVeh = (parentVeh and parentVeh.IsGlideVehicle and parentVeh) or (IsValid(veh) and veh.IsGlideVehicle and veh)
+		local isDriver = glideVeh and owner.GlideGetSeatIndex and owner:GlideGetSeatIndex() == 1
+		if isDriver then
+			if org and org.rarmamputated then return false end
+		end
+	end
+
 	return true
 end
 
