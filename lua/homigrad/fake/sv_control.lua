@@ -403,6 +403,40 @@ hook.Add("Think", "Fake", function()
 			ragdoll.holdingWoundHand = nil
 			ragdoll.holdingWound = nil
 		end
+
+		do
+			local veh = ply.GlideGetVehicle and ply:GlideGetVehicle() or ply:GetVehicle()
+			local parentVeh = IsValid(veh) and IsValid(veh:GetParent()) and veh:GetParent() or nil
+			local glideVeh = (parentVeh and parentVeh.IsGlideVehicle and parentVeh) or (IsValid(veh) and veh.IsGlideVehicle and veh)
+			local isBike = false
+			if glideVeh and glideVeh.VehicleType and glideVeh.VehicleType == Glide.VEHICLE_TYPE.MOTORCYCLE then
+				isBike = true
+			end
+			local wasBike = ragdoll.isOnBike
+			if isBike ~= wasBike then
+				if not isBike then
+					for i = 1, 4 do
+						if ragdoll:LookupBone("ValveBiped.Bip01_L_Finger" .. tostring(i) .. "1") then
+							ragdoll:ManipulateBoneAngles(ragdoll:LookupBone("ValveBiped.Bip01_L_Finger" .. tostring(i) .. "1"), Angle(0, 0, 0))
+						end
+						if ragdoll:LookupBone("ValveBiped.Bip01_R_Finger" .. tostring(i) .. "1") then
+							ragdoll:ManipulateBoneAngles(ragdoll:LookupBone("ValveBiped.Bip01_R_Finger" .. tostring(i) .. "1"), Angle(0, 0, 0))
+						end
+					end
+				end
+			end
+			if isBike then
+				for i = 1, 4 do
+					if not ragdoll:LookupBone("ValveBiped.Bip01_L_Finger" .. tostring(i) .. "1") then continue end
+					ragdoll:ManipulateBoneAngles(ragdoll:LookupBone("ValveBiped.Bip01_L_Finger" .. tostring(i) .. "1"), Angle(0, -50, 0))
+				end
+				for i = 1, 4 do
+					if not ragdoll:LookupBone("ValveBiped.Bip01_R_Finger" .. tostring(i) .. "1") then continue end
+					ragdoll:ManipulateBoneAngles(ragdoll:LookupBone("ValveBiped.Bip01_R_Finger" .. tostring(i) .. "1"), Angle(0, -50, 0))
+				end
+			end
+			ragdoll.isOnBike = isBike
+		end
 		
 		if not wep.RagdollFunc then
 			local force = math.max(1 - org.larm / 1.3, 0)
