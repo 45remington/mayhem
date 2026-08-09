@@ -3,6 +3,18 @@ local vecZero = Vector(0, 0, 0)
 local angZero = Angle(0, 0, 0)
 local shadowparams = {}
 
+hook.Add("PlayerButtonDown", "HoldWoundKeyDown", function(ply, key)
+	if key == KEY_F then
+		ply.hgHoldWoundKey = true
+	end
+end)
+
+hook.Add("PlayerButtonUp", "HoldWoundKeyUp", function(ply, key)
+	if key == KEY_F then
+		ply.hgHoldWoundKey = nil
+	end
+end)
+
 --[[
 local ply = Entity(1)
 local tbl = {}
@@ -329,10 +341,24 @@ hook.Add("Think", "Fake", function()
 		time = CurTime()
 		
 		local wound, arterial = GetFakeHoldWound(org)
-		local holdingWound = wound and org.canmove and ply:KeyDown(IN_WALK) and ply:KeyDown(IN_USE)
+		local holdingWound = wound and org.canmove and ply:KeyDown(IN_JUMP) and ply.hgHoldWoundKey
+		local woundHandId = 5
+		local woundForceRelease = false
 		if holdingWound then
-			if IsValid(ragdoll.ConsLH) then ragdoll.ConsLH:Remove() ragdoll.ConsLH = nil end
-			if IsValid(ragdoll.ConsRH) then ragdoll.ConsRH:Remove() ragdoll.ConsRH = nil end
+			local lhGripped = IsValid(ragdoll.ConsLH)
+			local rhGripped = IsValid(ragdoll.ConsRH)
+			if lhGripped and not rhGripped then
+				woundHandId = 7
+			elseif rhGripped and not lhGripped then
+				woundHandId = 5
+			elseif lhGripped and rhGripped then
+				woundHandId = 5
+				woundForceRelease = true
+			end
+			local usingLHand = woundHandId == 5
+			local usingRHand = woundHandId == 7
+			if usingLHand and IsValid(ragdoll.ConsLH) then ragdoll.ConsLH:Remove() ragdoll.ConsLH = nil end
+			if usingRHand and IsValid(ragdoll.ConsRH) then ragdoll.ConsRH:Remove() ragdoll.ConsRH = nil end
 
 			local tr = {}
 			tr.start = ragdoll:GetPos()
@@ -349,23 +375,32 @@ hook.Add("Think", "Fake", function()
 					org.holdingWoundArterial = arterial
 					org.holdingWoundUntil = CurTime() + 0.2
 					
-					shadowControl(ragdoll, 3, 0.05, nil, nil, nil, spine:GetPos() + spine:GetAngles():Right() * -50, 25, 10)
-					shadowControl(ragdoll, 5, 0.08, (pos - lhand:GetPos()):Angle(), 140, 40, pos - (pos - lhand:GetPos()):GetNormalized() * 2, 160, 30)
+					local isRightWound = woundHandId == 7
+					local woundHandPhys = isRightWound and rhand or lhand
+					local spineOffset = isRightWound and 50 or -50
+					local fingerPrefix = isRightWound and "Bip01_R_Finger" or "Bip01_L_Finger"
+
+					shadowControl(ragdoll, 3, 0.05, nil, nil, nil, spine:GetPos() + spine:GetAngles():Right() * spineOffset, 25, 10)
+					shadowControl(ragdoll, woundHandId, 0.08, (pos - woundHandPhys:GetPos()):Angle(), 140, 40, pos - (pos - woundHandPhys:GetPos()):GetNormalized() * 2, 160, 30)
 
 					for i = 1, 4 do
-						if not ragdoll:LookupBone("ValveBiped.Bip01_L_Finger" .. tostring(i) .. "1") then continue end
-						ragdoll:ManipulateBoneAngles(ragdoll:LookupBone("ValveBiped.Bip01_L_Finger" .. tostring(i) .. "1"), Angle(0, -55, 0))
+						if not ragdoll:LookupBone("ValveBiped." .. fingerPrefix .. tostring(i) .. "1") then continue end
+						ragdoll:ManipulateBoneAngles(ragdoll:LookupBone("ValveBiped." .. fingerPrefix .. tostring(i) .. "1"), Angle(0, -55, 0))
 					end
 
+					ragdoll.holdingWoundHand = isRightWound and "R" or "L"
 					ragdoll.holdingWound = true
 				end
 			end
 		elseif ragdoll.holdingWound then
+			local isRightWound = ragdoll.holdingWoundHand == "R"
+			local fingerPrefix = isRightWound and "Bip01_R_Finger" or "Bip01_L_Finger"
 			for i = 1, 4 do
-				if not ragdoll:LookupBone("ValveBiped.Bip01_L_Finger" .. tostring(i) .. "1") then continue end
-				ragdoll:ManipulateBoneAngles(ragdoll:LookupBone("ValveBiped.Bip01_L_Finger" .. tostring(i) .. "1"), Angle(0, 0, 0))
+				if not ragdoll:LookupBone("ValveBiped." .. fingerPrefix .. tostring(i) .. "1") then continue end
+				ragdoll:ManipulateBoneAngles(ragdoll:LookupBone("ValveBiped." .. fingerPrefix .. tostring(i) .. "1"), Angle(0, 0, 0))
 			end
 
+			ragdoll.holdingWoundHand = nil
 			ragdoll.holdingWound = nil
 		end
 		
@@ -636,7 +671,8 @@ hook.Add("Think", "Fake", function()
 					end
 				end
 			else
-				if IsValid(ragdoll.ConsLH) then
+				local keepLH = holdingWound and woundHandId == 7
+				if IsValid(ragdoll.ConsLH) and not keepLH then
 					ragdoll.ConsLH:Remove()
 					ragdoll.ConsLH = nil
 					for i = 1, 4 do
@@ -724,7 +760,8 @@ hook.Add("Think", "Fake", function()
 					end
 				end
 			else
-				if IsValid(ragdoll.ConsRH) then
+				local keepRH = holdingWound and woundHandId == 5
+				if IsValid(ragdoll.ConsRH) and not keepRH then
 					ragdoll.ConsRH:Remove()
 					ragdoll.ConsRH = nil
 					for i = 1, 4 do

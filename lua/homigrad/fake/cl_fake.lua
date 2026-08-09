@@ -301,8 +301,8 @@ hook.Add("HUDPaint", "FakeWoundHint", function()
 	local arterialwounds = lply:GetNetVar("arterialwounds")
 	if table.IsEmpty(wounds or {}) and table.IsEmpty(arterialwounds or {}) then return end
 
-	local holding = lply:KeyDown(IN_WALK) and lply:KeyDown(IN_USE)
-	local text = holding and FakeWoundText("holding wound. . .") or "hold alt+e to hold wound"
+	local holding = lply:KeyDown(IN_JUMP) and input.IsKeyDown(KEY_F)
+	local text = holding and FakeWoundText("holding wound. . .") or "hold f+space to hold wound"
 	woundHintAlpha = LerpFT(0.08, woundHintAlpha, 145)
 	woundHintColor.a = woundHintAlpha
 

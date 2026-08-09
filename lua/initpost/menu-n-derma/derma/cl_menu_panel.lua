@@ -1396,6 +1396,8 @@ function PANEL:ReturnToBaseMenu()
         self.FullscreenPanel = nil
     end
 
+    self:ClearActiveSelect()
+
     local panel = self.panelparrent
     panel:AlphaTo(0, 0.12, 0, function()
         if not IsValid(panel) then
@@ -1410,10 +1412,16 @@ function PANEL:ReturnToBaseMenu()
             return
         end
 
-        self:ClearActiveSelect()
-
         if IsValid(self.lDock) then
             self.lDock:MoveToFront()
+        end
+
+        if IsValid(self.ButtonDock) then
+            self.ButtonDock:MoveToFront()
+        end
+
+        if IsValid(self.ButtonDockWrap) then
+            self.ButtonDockWrap:MoveToFront()
         end
     end)
 end

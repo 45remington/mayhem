@@ -188,6 +188,7 @@ end
 
 local vecZoom1 = Vector(1, -1, 0)
 local angZoom1 = Angle(0, 0, 0)
+local aimCameraRollLerp = 0
 function SWEP:AnimZoom()
 	local owner = self:GetOwner()
 	local bon = owner:LookupBone("ValveBiped.Bip01_Head1")
@@ -198,10 +199,39 @@ function SWEP:AnimZoom()
 	angZoom1[1] = self:IsZoom() and (self.desiredPos - pos):GetNormalized():Dot(owner:EyeAngles():Right()) or 0
 	angZoom1[1] = self:IsZoom() and (-angZoom1[1] * 50) or 0
 	angZoom1[1] = self:IsZoom() and math.Clamp(angZoom1[1],-20,20) or 0
-	
+
+	local rollTarget = angZoom1[1] * 0.6
+	if not self:IsPistolHoldType() then
+		rollTarget = -rollTarget
+	end
+	self.AimCameraRoll = Lerp(math.min(FrameTime() * 12, 1), self.AimCameraRoll or 0, rollTarget)
+	if CLIENT and owner == LocalPlayer() then
+		aimCameraRollLerp = self.AimCameraRoll or 0
+	end
+
 	if !angZoom1:IsEqualTol(angle_zero, 0.01) then
 		self:BoneSet("head", vecZero, angZoom1, "aiming", 0.1)
 	end
+end
+
+if CLIENT then
+	hook.Add("PostHGCalcView", "AimCameraTilt", function(ply, view)
+		if not ply or not view then return end
+		if hg_thirdperson and hg_thirdperson:GetBool() then return end
+		if hg_gopro and hg_gopro:GetBool() then return end
+
+		local wep = ply:GetActiveWeapon()
+		local validWep = IsValid(wep) and ishgweapon(wep) and wep.IsZoom and wep:IsZoom()
+		local roll = validWep and aimCameraRollLerp or 0
+		if not validWep then
+			aimCameraRollLerp = Lerp(math.min(FrameTime() * 12, 1), aimCameraRollLerp or 0, 0)
+			roll = aimCameraRollLerp
+		end
+
+		if math.abs(roll) > 0.01 then
+			view.angles[3] = view.angles[3] + roll
+		end
+	end)
 end
 
 local math_max, math_Clamp = math.max, math.Clamp
