@@ -6,6 +6,68 @@ hg.organism.fake_spine3 = 0.5
 hg.organism.fake_legs = 1
 hg.organism.input_list = hg.organism.input_list or {}
 
+util.AddNetworkString("hg_DeathCause")
+
+local dmgTypeNames = {
+	[DMG_BULLET] = "a gunshot wound", [DMG_SLASH] = "a laceration", [DMG_BURN] = "fire", [DMG_CRUSH] = "crushing",
+	[DMG_DROWN] = "drowning", [DMG_POISON] = "poisoning", [DMG_RADIATION] = "radiation",
+	[DMG_SHOCK] = "electrocution", [DMG_FALL] = "a fall", [DMG_BLAST] = "an explosion",
+	[DMG_CLUB] = "blunt force trauma", [DMG_ENERGYBEAM] = "an energy beam", [DMG_SONIC] = "sonic damage",
+	[DMG_PHYSGUN] = "a physgun", [DMG_PLASMA] = "plasma", [DMG_AIRBOAT] = "an airboat",
+	[DMG_DISSOLVE] = "dissolution", [DMG_BUCKSHOT] = "buckshot", [DMG_DIRECT] = "direct damage",
+	[DMG_SNIPER] = "a sniper round", [DMG_GENERIC] = "unknown trauma",
+}
+
+local function NiceWeaponName(wep)
+	if not IsValid(wep) then return nil end
+	local name = wep.PrintName or wep:GetClass() or ""
+	name = string.gsub(name, "^weapon_hg_", "")
+	name = string.gsub(name, "^weapon_", "")
+	name = string.gsub(name, "_", " ")
+	return name
+end
+
+local function GetDeathCause(victim, inflictor, attacker)
+	-- prefer organism-tracked last damage
+	local org = victim.organism
+	if org and org.lastDmgTime and (CurTime() - org.lastDmgTime) < 30 then
+		attacker = org.lastDmgAttacker or attacker
+		inflictor = org.lastDmgInflictor or inflictor
+		local dtype = org.lastDmgType or 0
+		local cause = dmgTypeNames[dtype] or "unknown causes"
+
+		if IsValid(attacker) and attacker:IsPlayer() and attacker ~= victim then
+			local wepName = NiceWeaponName(attacker:GetActiveWeapon()) or "their hands"
+			return "Killed by " .. attacker:Nick() .. " with " .. wepName .. " (" .. cause .. ")"
+		elseif IsValid(attacker) and attacker:IsNPC() then
+			return "Killed by " .. (attacker:GetName() ~= "" and attacker:GetName() or attacker:GetClass()) .. " (" .. cause .. ")"
+		elseif IsValid(inflictor) and inflictor ~= attacker then
+			return "Killed by " .. (NiceWeaponName(inflictor) or inflictor:GetClass() or "something") .. " (" .. cause .. ")"
+		end
+		return "Died of " .. cause
+	end
+
+	-- fallback to the hook's args
+	if IsValid(attacker) and attacker:IsPlayer() and attacker ~= victim then
+		local wepName = NiceWeaponName(attacker:GetActiveWeapon()) or "their hands"
+		return "Killed by " .. attacker:Nick() .. " with " .. wepName
+	elseif IsValid(attacker) and attacker:IsNPC() then
+		return "Killed by " .. (attacker:GetClass() or "a creature")
+	elseif IsValid(inflictor) then
+		return "Killed by " .. (NiceWeaponName(inflictor) or inflictor:GetClass() or "something")
+	end
+	return "Unknown causes"
+end
+
+hook.Add("PlayerDeath", "hg_DeathCauseTrack", function(victim, inflictor, attacker)
+	local cause = GetDeathCause(victim, inflictor, attacker)
+	victim.SetNetVar = victim.SetNetVar or function() end
+	victim:SetNetVar("DeathCause", cause)
+	net.Start("hg_DeathCause")
+		net.WriteString(cause)
+	net.Send(victim)
+end)
+
 local vecZero, angZero = Vector(), Angle()
 local hook_Run = hook.Run
 local input_list = hg.organism.input_list
@@ -523,6 +585,12 @@ hook.Add("EntityTakeDamage", "homigrad-damage", function(ent, dmgInfo)
 	local inf = IsValid(dmgInfo:GetInflictor()) and not dmgInfo:GetInflictor():IsPlayer() and dmgInfo:GetInflictor() or (dmgInfo:GetAttacker():IsPlayer() and dmgInfo:GetAttacker():GetActiveWeapon()) or dmgInfo:GetAttacker()
 	inf = IsValid(inf.weapon) and inf.weapon or inf
 	if IsValid(inf) then dmgInfo:SetInflictor(inf) end
+
+	-- track last damage source for cause-of-death
+	org.lastDmgAttacker = dmgInfo:GetAttacker()
+	org.lastDmgInflictor = dmgInfo:GetInflictor()
+	org.lastDmgType = dmgInfo:GetDamageType()
+	org.lastDmgTime = time
 	
 	local dmg = dmgInfo:GetDamage()
 

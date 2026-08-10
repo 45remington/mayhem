@@ -221,17 +221,42 @@ surface.CreateFont("ZC_MM_Greeting", {
     extended = true
 })
 
-local traitorLoadoutItems = {
-	p22 = {name = "Walther P22", cost = 9, group = "weapon"},
-	usp = {name = "HK USP", cost = 13, group = "weapon"},
-	mag = {name = "Extra magazine", cost = 5},
-	suppressor = {name = "Suppressor", cost = 4},
-	knife = {name = "Pocket knife", cost = 3}
+local traitorLoadoutCatalog = {
+	-- weapons
+	p22            = {name = "Walther P22",       cost = 9,  group = "weapon"},
+	usp            = {name = "HK USP",            cost = 13, group = "weapon"},
+	-- attachments
+	mag            = {name = "Extra magazine",    cost = 5,  group = "attachment"},
+	suppressor     = {name = "Suppressor",        cost = 4,  group = "attachment"},
+	laser          = {name = "Laser sight",       cost = 3,  group = "attachment"},
+	-- melee
+	poisonknife    = {name = "Poisoned knife",    cost = 7,  group = "melee"},
+	pocketknife    = {name = "Pocket knife",      cost = 3,  group = "melee"},
+	machete        = {name = "Machete",            cost = 5,  group = "melee"},
+	fiberwire      = {name = "Fiber wire",        cost = 6,  group = "melee"},
+	-- poisons
+	cyanide        = {name = "Cyanide canister",  cost = 8,  group = "poison"},
+	capsule        = {name = "Cyanide capsule",    cost = 4,  group = "poison"},
+	-- traps
+	ied            = {name = "IED bomb",          cost = 9,  group = "trap"},
+	slam           = {name = "SLAM C4",           cost = 7,  group = "trap"},
+	-- throwables
+	smoke          = {name = "Smoke grenade",     cost = 4,  group = "throw"},
+	molotov        = {name = "Molotov",           cost = 5,  group = "throw"},
+	flashbang      = {name = "Flashbang",         cost = 4,  group = "throw"},
+	-- medical
+	bandage        = {name = "Bandage",           cost = 3,  group = "med"},
+	morphine       = {name = "Morphine",          cost = 4,  group = "med"},
+	adrenaline     = {name = "Adrenaline",         cost = 4,  group = "med"},
+	-- gear
+	suit           = {name = "Disguise suit",     cost = 6,  group = "gear"},
+	walkie         = {name = "Walkie talkie",      cost = 3,  group = "gear"},
 }
 
+local traitorLoadoutPoints = 32
+
 local function GetTraitorLoadout()
-	local data = util.JSONToTable(cookie.GetString("mayhem_traitor_loadout", "{}")) or {}
-	return data
+	return util.JSONToTable(cookie.GetString("mayhem_traitor_loadout", "{}")) or {}
 end
 
 local function SaveTraitorLoadout(data)
@@ -244,10 +269,14 @@ local function SaveTraitorLoadout(data)
 end
 
 local function TraitorLoadoutCost(data)
-	local cost = data.weapon and traitorLoadoutItems[data.weapon] and traitorLoadoutItems[data.weapon].cost or 0
-	if data.mag then cost = cost + traitorLoadoutItems.mag.cost end
-	if data.suppressor then cost = cost + traitorLoadoutItems.suppressor.cost end
-	if data.knife then cost = cost + traitorLoadoutItems.knife.cost end
+	local cost = 0
+	if data.weapon and traitorLoadoutCatalog[data.weapon] then cost = cost + traitorLoadoutCatalog[data.weapon].cost end
+	for _, k in ipairs({"mag","suppressor","laser","bandage","morphine","adrenaline","suit","walkie"}) do
+		if data[k] then cost = cost + traitorLoadoutCatalog[k].cost end
+	end
+	for _, k in ipairs({"melee","poison","trap","throw"}) do
+		if data[k] and traitorLoadoutCatalog[data[k]] then cost = cost + traitorLoadoutCatalog[data[k]].cost end
+	end
 	return cost
 end
 
@@ -256,117 +285,185 @@ function hg.DrawTraitorLoadout(pp)
 	pp:SetPos(0, 0)
 	pp:SetSize(ScrW(), ScrH())
 	local data = table.Copy(GetTraitorLoadout())
-	local points = 32
-	local controls = {}
 
 	pp.Paint = function(_, w, h)
-		surface.SetDrawColor(8, 8, 10, 245)
+		surface.SetDrawColor(6, 6, 9, 250)
 		surface.DrawRect(0, 0, w, h)
-		surface.SetDrawColor(70, 10, 10, 110)
-		surface.DrawRect(0, 0, w, MenuScaleH(92))
-		surface.SetDrawColor(255, 255, 255, 18)
-		surface.DrawOutlinedRect(MenuScale(24), MenuScaleH(110), w - MenuScale(48), h - MenuScaleH(155), 1)
+		surface.SetDrawColor(80, 12, 12, 130)
+		surface.DrawRect(0, 0, w, MenuScaleH(86))
+		surface.SetDrawColor(18, 18, 22, 245)
+		surface.DrawRect(MenuScale(24), MenuScaleH(104), w - MenuScale(48), h - MenuScaleH(168), 1)
+		surface.SetDrawColor(255, 255, 255, 12)
+		surface.DrawOutlinedRect(MenuScale(24), MenuScaleH(104), w - MenuScale(48), h - MenuScaleH(168), 1)
 	end
 
 	local title = vgui.Create("DLabel", pp)
 	title:SetFont("ZC_MM_Title")
 	title:SetText("TRAITOR LOADOUT")
-	title:SetTextColor(Color(255,255,255))
-	title:SetPos(MenuScale(34), MenuScaleH(28))
+	title:SetTextColor(Color(255, 200, 200))
+	title:SetPos(MenuScale(34), MenuScaleH(26))
 	title:SizeToContents()
 
 	local pointsLabel = vgui.Create("DLabel", pp)
 	pointsLabel:SetFont("ZC_MM_MenuButtonMarquee")
-	pointsLabel:SetTextColor(Color(220,220,220))
-	pointsLabel:SetPos(ScrW() - MenuScale(210), MenuScaleH(42))
+	pointsLabel:SetTextColor(Color(180, 220, 180))
+	pointsLabel:SizeToContents()
 
 	local function RefreshPoints()
-		pointsLabel:SetText("points: " .. tostring(TraitorLoadoutCost(data)) .. " / " .. points)
+		local used = TraitorLoadoutCost(data)
+		pointsLabel:SetText("POINTS  " .. used .. " / " .. traitorLoadoutPoints)
 		pointsLabel:SizeToContents()
+		pointsLabel:SetPos(ScrW() - MenuScale(34) - pointsLabel:GetWide(), MenuScaleH(38))
 	end
 
-	local function CanToggle(key)
-		local copy = table.Copy(data)
-		copy[key] = not copy[key]
-		return TraitorLoadoutCost(copy) <= points
+	local function CanAfford(cost)
+		return TraitorLoadoutCost(data) + cost <= traitorLoadoutPoints
 	end
 
-	local function MakeButton(text, x, y, w, h, click, active, hidden)
-		local btn = vgui.Create("DButton", pp)
+	-- scrollable content panel
+	local scroll = vgui.Create("DScrollPanel", pp)
+	scroll:SetPos(MenuScale(24), MenuScaleH(104))
+	scroll:SetSize(ScrW() - MenuScale(48), ScrH() - MenuScaleH(168))
+	local sb = scroll:GetVBar()
+	sb:SetWide(MenuScale(4))
+	sb.Paint = function() end
+	sb.btnUp.Paint = function() end
+	sb.btnDown.Paint = function() end
+	sb.btnGrip.Paint = function(_, w, h)
+		surface.SetDrawColor(160, 30, 30, 140)
+		surface.DrawRect(0, 0, w, h)
+	end
+
+	local list = vgui.Create("DListLayout", scroll)
+	list:SetPos(0, 0)
+	list:SetSize(scroll:GetWide() - sb:GetWide(), 0)
+
+	local function HeaderLabel(text, parent)
+		local lbl = vgui.Create("DLabel", parent)
+		lbl:SetFont("ZC_MM_MenuButtonMarquee")
+		lbl:SetText(string.upper(text))
+		lbl:SetTextColor(Color(190, 60, 60))
+		lbl:SizeToContents()
+		lbl:Dock(TOP)
+		lbl:DockMargin(MenuScale(4), MenuScaleH(10), 0, MenuScaleH(2))
+		return lbl
+	end
+
+	local function OptionButton(text, cost, parent, isOn, onClick, canUse)
+		local btn = vgui.Create("DButton", parent)
 		btn:SetText("")
-		btn:SetPos(x, y)
-		btn:SetSize(w, h)
+		btn:Dock(TOP)
+		btn:DockMargin(0, MenuScaleH(2), 0, 0)
+		btn:SetTall(MenuScaleH(30))
 		btn.Lerp = 0
-		btn.DoClick = click
-		controls[#controls + 1] = btn
-		btn.Paint = function(self, bw, bh)
-			if hidden and hidden() then return end
-			self.Lerp = LerpFT(0.12, self.Lerp, (self:IsHovered() or active()) and 1 or 0)
-			surface.SetDrawColor(18, 18, 22, 230)
-			surface.DrawRect(0, 0, bw, bh)
-			surface.SetDrawColor(160, 20, 20, 45 + 100 * self.Lerp)
-			surface.DrawRect(0, 0, bw * self.Lerp, bh)
-			surface.SetDrawColor(255, 255, 255, 28 + 90 * self.Lerp)
-			surface.DrawOutlinedRect(0, 0, bw, bh, 1)
-			draw.SimpleText(active() and "[x]" or "[ ]", "ZC_MM_MenuButtonMarquee", MenuScale(10), bh / 2, Color(255,255,255, 180 + 75 * self.Lerp), TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER)
-			draw.SimpleText(text, "ZC_MM_MenuButtonMarquee", MenuScale(48), bh / 2, Color(255,255,255, 175 + 80 * self.Lerp), TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER)
+		btn.DoClick = function()
+			if isOn() then
+				onClick(false)
+			else
+				if canUse and not canUse() then return end
+				if not CanAfford(cost) then return end
+				onClick(true)
+			end
+			RefreshPoints()
 		end
-		btn.Think = function(self) if hidden then self:SetVisible(not hidden()) end end
+		btn.Paint = function(self, bw, bh)
+			local on = isOn()
+			self.Lerp = LerpFT(0.12, self.Lerp, (self:IsHovered() or on) and 1 or 0)
+			surface.SetDrawColor(14, 14, 18, 235)
+			surface.DrawRect(0, 0, bw, bh)
+			surface.SetDrawColor(150, 25, 25, 35 + 100 * self.Lerp)
+			surface.DrawRect(0, 0, bw * self.Lerp, bh)
+			surface.SetDrawColor(255, 255, 255, 22 + 80 * self.Lerp)
+			surface.DrawOutlinedRect(0, 0, bw, bh, 1)
+			draw.SimpleText(on and "[x]" or "[ ]", "ZC_MM_MenuButtonMarquee", MenuScale(10), bh / 2, Color(255, 255, 255, 170 + 70 * self.Lerp), TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER)
+			draw.SimpleText(text, "ZC_MM_MenuButtonMarquee", MenuScale(32), bh / 2, Color(255, 255, 255, 175 + 70 * self.Lerp), TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER)
+			draw.SimpleText(cost .. "p", "ZC_MM_MenuButtonMarquee", bw - MenuScale(10), bh / 2, Color(210, 90, 90, 200 + 55 * self.Lerp), TEXT_ALIGN_RIGHT, TEXT_ALIGN_CENTER)
+		end
 		return btn
 	end
 
-	MakeButton("Walther P22 - 9", MenuScale(52), MenuScaleH(145), MenuScale(285), MenuScaleH(38), function()
-		data.weapon = "p22"
-		RefreshPoints()
-	end, function() return data.weapon == "p22" end)
-
-	MakeButton("HK USP - 13", MenuScale(52), MenuScaleH(190), MenuScale(285), MenuScaleH(38), function()
-		data.weapon = "usp"
-		RefreshPoints()
-	end, function() return data.weapon == "usp" end)
-
-	for i, opt in ipairs({{"mag", "extra mag - 5"}, {"suppressor", "suppressor - 4"}}) do
-		local key, text = opt[1], opt[2]
-		MakeButton(text, MenuScale(375), MenuScaleH(145 + i * 44), MenuScale(285), MenuScaleH(34), function()
-			if not data[key] and not CanToggle(key) then return end
-			data[key] = not data[key]
-			RefreshPoints()
-		end, function() return data[key] end, function() return not data.weapon end)
+	-- single-pick group (weapon, melee, poison, trap, throw)
+	local function SinglePickGroup(title, keys, dataKey, parent)
+		HeaderLabel(title, parent)
+		for _, key in ipairs(keys) do
+			local info = traitorLoadoutCatalog[key]
+			OptionButton(info.name, info.cost, parent,
+				function() return data[dataKey] == key end,
+				function(on) data[dataKey] = on and key or nil end)
+		end
 	end
 
-	MakeButton("pocket knife - 3", MenuScale(375), MenuScaleH(285), MenuScale(285), MenuScaleH(34), function()
-		if not data.knife and not CanToggle("knife") then return end
-		data.knife = not data.knife
-		RefreshPoints()
-	end, function() return data.knife end)
+	-- toggle group (attachments, med, gear)
+	local function ToggleGroup(title, keys, parent, canUse)
+		HeaderLabel(title, parent)
+		for _, key in ipairs(keys) do
+			local info = traitorLoadoutCatalog[key]
+			OptionButton(info.name, info.cost, parent,
+				function() return data[key] end,
+				function(on) data[key] = on end,
+				canUse)
+		end
+	end
+
+	-- build the list
+	SinglePickGroup("Pistols", {"p22", "usp"}, "weapon", list)
+	ToggleGroup("Attachments", {"mag", "suppressor", "laser"}, list, function() return data.weapon ~= nil end)
+	SinglePickGroup("Melee", {"poisonknife", "pocketknife", "machete", "fiberwire"}, "melee", list)
+	SinglePickGroup("Poisons", {"cyanide", "capsule"}, "poison", list)
+	SinglePickGroup("Traps", {"ied", "slam"}, "trap", list)
+	SinglePickGroup("Throwables", {"smoke", "molotov", "flashbang"}, "throw", list)
+	ToggleGroup("Medical", {"bandage", "morphine", "adrenaline"}, list)
+	ToggleGroup("Gear", {"suit", "walkie"}, list)
 
 	local function ActionButton(text, x, click)
 		local btn = vgui.Create("DButton", pp)
 		btn:SetText("")
-		btn:SetPos(x, ScrH() - MenuScaleH(72))
-		btn:SetSize(MenuScale(105), MenuScaleH(34))
+		btn:SetPos(x, ScrH() - MenuScaleH(64))
+		btn:SetSize(MenuScale(110), MenuScaleH(34))
 		btn.DoClick = click
 		btn.Paint = function(self, w, h)
 			local hover = self:IsHovered() and 1 or 0
-			surface.SetDrawColor(24, 24, 28, 235)
+			surface.SetDrawColor(20, 20, 26, 240)
 			surface.DrawRect(0, 0, w, h)
-			surface.SetDrawColor(160, 20, 20, 60 + 80 * hover)
+			surface.SetDrawColor(150, 25, 25, 50 + 90 * hover)
 			surface.DrawOutlinedRect(0, 0, w, h, 1)
-			draw.SimpleText(text, "ZC_MM_MenuButtonMarquee", w / 2, h / 2, Color(255,255,255,210 + 45 * hover), TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+			draw.SimpleText(text, "ZC_MM_MenuButtonMarquee", w / 2, h / 2, Color(255, 255, 255, 200 + 55 * hover), TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
 		end
 	end
 
-	ActionButton("apply", ScrW() - MenuScale(485), function() SaveTraitorLoadout(data) end)
-	ActionButton("cancel", ScrW() - MenuScale(370), function() if luaMenu then luaMenu:ReturnToBaseMenu() end end)
-	ActionButton("clear", ScrW() - MenuScale(255), function() data = {} RefreshPoints() end)
-	ActionButton("x", ScrW() - MenuScale(140), function() if luaMenu then luaMenu:ReturnToBaseMenu() end end)
+	ActionButton("apply", ScrW() - MenuScale(500), function() SaveTraitorLoadout(data) end)
+	ActionButton("random", ScrW() - MenuScale(380), function()
+		data = {}
+		local groups = {
+			{key = "weapon", pool = {"p22", "usp"}},
+			{key = "melee", pool = {"poisonknife", "pocketknife", "machete", "fiberwire"}},
+			{key = "poison", pool = {"cyanide", "capsule"}},
+			{key = "trap", pool = {"ied", "slam"}},
+			{key = "throw", pool = {"smoke", "molotov", "flashbang"}},
+		}
+		for _, g in ipairs(groups) do
+			local pick = g.pool[math.random(#g.pool)]
+			if CanAfford(traitorLoadoutCatalog[pick].cost) then data[g.key] = pick end
+		end
+		local att = {"mag", "suppressor", "laser"}
+		for _, k in ipairs(att) do
+			if data.weapon and CanAfford(traitorLoadoutCatalog[k].cost) and math.random() > 0.5 then data[k] = true end
+		end
+		local toggle = {"bandage", "morphine", "adrenaline", "suit", "walkie"}
+		for _, k in ipairs(toggle) do
+			if CanAfford(traitorLoadoutCatalog[k].cost) and math.random() > 0.6 then data[k] = true end
+		end
+		RefreshPoints()
+	end)
+	ActionButton("clear", ScrW() - MenuScale(260), function() data = {} RefreshPoints() end)
+	ActionButton("cancel", ScrW() - MenuScale(140), function() if luaMenu then luaMenu:ReturnToBaseMenu() end end)
 
 	local hint = vgui.Create("DLabel", pp)
 	hint:SetFont("ZC_MM_StockText")
-	hint:SetText("Pick a pistol to show its attachments. Apply saves your loadout.")
-	hint:SetTextColor(Color(190,190,190))
-	hint:SetPos(MenuScale(56), ScrH() - MenuScaleH(72))
+	hint:SetText("Pick your gear. Attachments require a weapon. Apply saves your loadout.")
+	hint:SetTextColor(Color(170, 170, 170))
 	hint:SizeToContents()
+	hint:SetPos(MenuScale(34), ScrH() - MenuScaleH(56))
 
 	RefreshPoints()
 end

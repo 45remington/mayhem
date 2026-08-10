@@ -225,6 +225,19 @@ local deathMusicPlaying = false
 local deathMusicStart = 0
 local deathMusicFadeOut
 
+local deathCauseText = "Unknown causes"
+net.Receive("hg_DeathCause", function()
+	deathCauseText = net.ReadString() or "Unknown causes"
+end)
+
+surface.CreateFont("HGDeathCause", {
+	font = "Comicate",
+	size = math.floor(ScrH() / 38),
+	weight = 500,
+	antialias = true,
+	extended = true,
+})
+
 local function DeathScreenActive()
 	if IsValid(lply) and lply:Alive() then deathMenuSpectating = false end
 	return IsValid(lply) and not lply:Alive() and not deathMenuSpectating
@@ -294,6 +307,21 @@ local function FakeWoundText(text)
 	return out
 end
 
+local hgHoldWoundLocal = false
+concommand.Add("+hg_holdwound", function()
+	hgHoldWoundLocal = true
+	net.Start("hg_holdwound")
+		net.WriteBool(true)
+	net.SendToServer()
+end)
+
+concommand.Add("-hg_holdwound", function()
+	hgHoldWoundLocal = false
+	net.Start("hg_holdwound")
+		net.WriteBool(false)
+	net.SendToServer()
+end)
+
 hook.Add("HUDPaint", "FakeWoundHint", function()
 	if not IsValid(lply) or not IsValid(lply.FakeRagdoll) then return end
 
@@ -301,8 +329,8 @@ hook.Add("HUDPaint", "FakeWoundHint", function()
 	local arterialwounds = lply:GetNetVar("arterialwounds")
 	if table.IsEmpty(wounds or {}) and table.IsEmpty(arterialwounds or {}) then return end
 
-	local holding = lply:KeyDown(IN_JUMP) and input.IsKeyDown(KEY_F)
-	local text = holding and FakeWoundText("holding wound. . .") or "hold f+space to hold wound"
+	local holding = hgHoldWoundLocal
+	local text = holding and FakeWoundText("holding wound (left hand). . .") or "bind a key to +hg_holdwound to hold wound"
 	woundHintAlpha = LerpFT(0.08, woundHintAlpha, 145)
 	woundHintColor.a = woundHintAlpha
 
@@ -352,6 +380,14 @@ hook.Add("PostRenderVGUI", "DeathMenu", function()
 	local deadY = ScrH() * 0.09 + (my - ScrH() / 2) * 0.015
 	draw.SimpleText("DEAD.", "HGDeathCrooked", deadX + 3, deadY + 3, Color(255, 255, 255, 35), TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
 	draw.SimpleText("DEAD.", "HGDeathCrooked", deadX, deadY, Color(255, 255, 255, 190), TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+
+	-- cause of death (top-right, gray scheme, Comicate font, no box)
+	local causeX = ScrW() - 30
+	local causeY = 30
+	draw.SimpleText("CAUSE OF DEATH", "HGDeathCause", causeX, causeY, Color(150, 150, 150, 220), TEXT_ALIGN_RIGHT, TEXT_ALIGN_TOP)
+	surface.SetFont("HGDeathCause")
+	local _, labelH = surface.GetTextSize("CAUSE OF DEATH")
+	draw.SimpleText(deathCauseText, "HGDeathCause", causeX, causeY + labelH + 6, Color(220, 220, 220, 240), TEXT_ALIGN_RIGHT, TEXT_ALIGN_TOP)
 
 	local gamemode = engine.ActiveGamemode()
 	local buttons = {}
