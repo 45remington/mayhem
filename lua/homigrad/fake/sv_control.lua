@@ -3,15 +3,21 @@ local vecZero = Vector(0, 0, 0)
 local angZero = Angle(0, 0, 0)
 local shadowparams = {}
 
-hook.Add("PlayerButtonDown", "HoldWoundKeyDown", function(ply, key)
-	if key == KEY_F then
-		ply.hgHoldWoundKey = true
+util.AddNetworkString("hg_holdwound")
+
+net.Receive("hg_holdwound", function(len, ply)
+	ply.hgHoldWoundKey = net.ReadBool() or nil
+end)
+
+hook.Add("PlayerButtonDown", "hgAltDown", function(ply, key)
+	if key == KEY_LALT or key == KEY_RALT then
+		ply.hgAltDown = true
 	end
 end)
 
-hook.Add("PlayerButtonUp", "HoldWoundKeyUp", function(ply, key)
-	if key == KEY_F then
-		ply.hgHoldWoundKey = nil
+hook.Add("PlayerButtonUp", "hgAltUp", function(ply, key)
+	if key == KEY_LALT or key == KEY_RALT then
+		ply.hgAltDown = nil
 	end
 end)
 
@@ -341,20 +347,12 @@ hook.Add("Think", "Fake", function()
 		time = CurTime()
 		
 		local wound, arterial = GetFakeHoldWound(org)
-		local holdingWound = wound and org.canmove and ply:KeyDown(IN_JUMP) and ply.hgHoldWoundKey
+		local holdingWound = wound and org.canmove and ply.hgHoldWoundKey
 		local woundHandId = 5
-		local woundForceRelease = false
+		if holdingWound and org.larmamputated then
+			woundHandId = 7
+		end
 		if holdingWound then
-			local lhGripped = IsValid(ragdoll.ConsLH)
-			local rhGripped = IsValid(ragdoll.ConsRH)
-			if lhGripped and not rhGripped then
-				woundHandId = 7
-			elseif rhGripped and not lhGripped then
-				woundHandId = 5
-			elseif lhGripped and rhGripped then
-				woundHandId = 5
-				woundForceRelease = true
-			end
 			local usingLHand = woundHandId == 5
 			local usingRHand = woundHandId == 7
 			if usingLHand and IsValid(ragdoll.ConsLH) then ragdoll.ConsLH:Remove() ragdoll.ConsLH = nil end
@@ -555,7 +553,7 @@ hook.Add("Think", "Fake", function()
 
 			local force = math.max(1 - org.rarm / 1.3, 0)
 
-			if not holdingWound and (!IsValid(ragdoll.ConsRH) and ply:KeyDown(IN_ATTACK2) or ((ishgweapon(wep) or wep.ismelee2) and ply:KeyDown(IN_USE))) then// || ply:InVehicle() then
+			if (not holdingWound or woundHandId == 5) and (!IsValid(ragdoll.ConsRH) and ply:KeyDown(IN_ATTACK2) or ((ishgweapon(wep) or wep.ismelee2) and ply:KeyDown(IN_USE))) then// || ply:InVehicle() then
 				if org.canmove then
 					--if org.shock > 1 and not ply:KeyDown(IN_ATTACK2) then angles = spine:GetAngles() end
 					//if !ply:InVehicle() then
@@ -716,7 +714,7 @@ hook.Add("Think", "Fake", function()
 				end
 			end
 
-			if not holdingWound and ply:KeyDown(IN_WALK) and org.canmove and !(ishgweapon(wep) or wep.ismelee2) and !org.rarmamputated and (!ply.HandsStun or ply.HandsStun < CurTime()) then
+			if (not holdingWound or woundHandId == 5) and (not holdingWound and ply:KeyDown(IN_WALK) or holdingWound and ply.hgAltDown == true) and org.canmove and !(ishgweapon(wep) or wep.ismelee2) and !org.rarmamputated and (!ply.HandsStun or ply.HandsStun < CurTime()) then
 				if IsValid(ragdoll.ConsRH) then
 					if hg_fake_stamina:GetBool() then
 						org.stamina.subadd = org.stamina.subadd + 0.06 * (ragdoll.staminaRightModifyer or 1) * ( IsValid(ragdoll.ConsLH) and 0.35 or 1.25) * (on_ground and 0.25 or 1)
@@ -794,7 +792,7 @@ hook.Add("Think", "Fake", function()
 					end
 				end
 			else
-				local keepRH = holdingWound and woundHandId == 5
+				local keepRH = holdingWound and woundHandId == 5 and ply.hgAltDown == true
 				if IsValid(ragdoll.ConsRH) and not keepRH then
 					ragdoll.ConsRH:Remove()
 					ragdoll.ConsRH = nil

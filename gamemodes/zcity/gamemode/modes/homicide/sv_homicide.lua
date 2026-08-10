@@ -1,4 +1,5 @@
 local MODE = MODE
+local GiveTraitorLoadout
 MODE.start_time = 1
 MODE.end_time = 7
  
@@ -264,16 +265,6 @@ MODE.Types.standard = {
 	},
 	Message = "The murderer was ",
 	TraitorLoot = function(ply)
-		ply:Give("weapon_hg_type59_tpik")
-		ply:Give("weapon_adrenaline")
-		ply:Give("weapon_hg_shuriken")
-		ply:Give("weapon_hg_smokenade_tpik")
-		ply:Give("weapon_traitor_ied")
-		ply:Give("weapon_traitor_poison1")
-		ply:Give("weapon_traitor_poison2")
-		ply:Give("weapon_traitor_poison3")
-		ply:Give("weapon_traitor_poison_consumable")
-		ply:Give("weapon_traitor_suit")
 		GiveTraitorLoadout(ply)
 
 		ply.organism.stamina.range = 220
@@ -338,14 +329,7 @@ MODE.Types.wildwest = {
 	},
 	Message = "The criminal was ",
 	TraitorLoot = function(ply)
-		ply:Give("weapon_sogknife")
-		ply:Give("weapon_hg_type59_tpik")
-		ply:Give("weapon_adrenaline")
-		local revolver = ply:Give(math.random(2) == 2 and "weapon_winchester" or "weapon_revolver2")
-		ply:GiveAmmo(revolver:GetMaxClip1() * 1,revolver:GetPrimaryAmmoType(),true)
-		ply:Give("weapon_traitor_ied")
-		ply:Give("weapon_hg_molotov_tpik")
-		ply:Give("weapon_hg_smokenade_tpik")
+		GiveTraitorLoadout(ply)
 
 		ply.organism.recoilmul = 1.0
 		ply.organism.stamina.range = 220
@@ -474,20 +458,7 @@ MODE.Types.gunfreezone = {
 	},
 	Message = "The murderer was ",
 	TraitorLoot = function(ply)
-		ply:Give("weapon_buck200knife")
-		ply:Give("weapon_hg_type59_tpik")
-		ply:Give("weapon_adrenaline")
-		ply:Give("weapon_hg_shuriken")
-		ply:Give("weapon_hg_smokenade_tpik")
-		ply:Give("weapon_traitor_ied")
-		ply:Give("weapon_traitor_poison1")
-		ply:Give("weapon_traitor_poison2")
-		ply:Give("weapon_traitor_poison3")
-		ply:Give("weapon_traitor_poison_consumable")
-		ply:Give("weapon_traitor_suit")
-
-		local wep = ply:Give("weapon_zoraki")
-		timer.Simple(1,function() wep:ApplyAmmoChanges(2) end)
+		GiveTraitorLoadout(ply)
 
 		ply.organism.stamina.range = 220
 
@@ -556,14 +527,6 @@ MODE.Types.soe = {
 	Message = "The traitor was ",
 	TraitorLoot = function(ply)
 		GiveTraitorLoadout(ply)
-		ply:Give("weapon_hg_type59_tpik")
-		ply:Give("weapon_walkie_talkie")
-		ply:Give("weapon_adrenaline")
-		ply:Give("weapon_hg_smokenade_tpik")
-		ply:Give("weapon_traitor_ied")
-		ply:Give("weapon_traitor_poison2")
-		ply:Give("weapon_traitor_poison3")
-		ply:Give("weapon_traitor_poison_consumable")
 		ply.organism.recoilmul = 1
 		ply.organism.stamina.range = 220
 
@@ -638,13 +601,102 @@ local modes = {
 util.AddNetworkString("HMCD_RoundStart")
 util.AddNetworkString("HMCD_TraitorLoadout")
 
-local traitorLoadoutCosts = {p22 = 9, usp = 13, mag = 5, suppressor = 4, knife = 3}
+local traitorLoadoutCatalog = {
+	-- weapons (only two)
+	p22            = {class = "weapon_p22",                 cost = 9,  type = "weapon"},
+	usp            = {class = "weapon_hk_usp",               cost = 13, type = "weapon"},
+	-- weapon attachments
+	mag            = {                                    cost = 5,  type = "attachment"},
+	suppressor     = {                                    cost = 4,  type = "attachment"},
+	laser          = {                                    cost = 3,  type = "attachment"},
+	-- melee (themed)
+	poisonknife    = {class = "weapon_traitor_poison1",     cost = 7,  type = "melee"},
+	pocketknife    = {class = "weapon_pocketknife",        cost = 3,  type = "melee"},
+	machete        = {class = "weapon_hg_machete",          cost = 5,  type = "melee"},
+	fiberwire      = {class = "weapon_fiberwire",           cost = 6,  type = "melee"},
+	-- poisons / chemicals
+	cyanide        = {class = "weapon_traitor_poison3",     cost = 8,  type = "poison"},
+	capsule        = {class = "weapon_traitor_poison_consumable", cost = 4, type = "poison"},
+	-- traps / sabotage
+	ied            = {class = "weapon_traitor_ied",         cost = 9,  type = "trap"},
+	slam           = {class = "weapon_hg_slam",             cost = 7,  type = "trap"},
+	-- throwables
+	smoke          = {class = "weapon_hg_smokenade_tpik",  cost = 4,  type = "throw"},
+	molotov        = {class = "weapon_hg_molotov_tpik",     cost = 5,  type = "throw"},
+	flashbang      = {class = "weapon_hg_flashbang_tpik",   cost = 4,  type = "throw"},
+	-- medical
+	bandage        = {class = "weapon_bandage_sh",         cost = 3,  type = "med"},
+	morphine       = {class = "weapon_morphine",            cost = 4,  type = "med"},
+	adrenaline     = {class = "weapon_adrenaline",          cost = 4,  type = "med"},
+	-- gear
+	suit           = {class = "weapon_traitor_suit",        cost = 6,  type = "gear"},
+	walkie         = {class = "weapon_walkie_talkie",       cost = 3,  type = "gear"},
+}
+
+local traitorLoadoutSuppressors = {p22 = "supressor4", usp = "supressor3"}
+local traitorLoadoutPoints = 32
+
+local traitorLoadoutValidKeys = {}
+for k in pairs(traitorLoadoutCatalog) do traitorLoadoutValidKeys[k] = true end
+
+local function TraitorLoadoutItemCost(data, key)
+	if key == "weapon" then
+		return data.weapon and traitorLoadoutCatalog[data.weapon] and traitorLoadoutCatalog[data.weapon].cost or 0
+	elseif key == "melee" then
+		return data.melee and traitorLoadoutCatalog[data.melee] and traitorLoadoutCatalog[data.melee].cost or 0
+	elseif key == "poison" then
+		return data.poison and traitorLoadoutCatalog[data.poison] and traitorLoadoutCatalog[data.poison].cost or 0
+	elseif key == "trap" then
+		return data.trap and traitorLoadoutCatalog[data.trap] and traitorLoadoutCatalog[data.trap].cost or 0
+	elseif key == "throw" then
+		return data.throw and traitorLoadoutCatalog[data.throw] and traitorLoadoutCatalog[data.throw].cost or 0
+	elseif traitorLoadoutCatalog[key] then
+		return data[key] and traitorLoadoutCatalog[key].cost or 0
+	end
+	return 0
+end
+
 local function SanitizeTraitorLoadout(data)
 	data = istable(data) and data or {}
-	local out = {weapon = (data.weapon == "usp" or data.weapon == "p22") and data.weapon or nil, mag = data.mag == true, suppressor = data.suppressor == true, knife = data.knife == true}
-	if not out.weapon then out.mag = false out.suppressor = false end
-	local cost = (out.weapon and traitorLoadoutCosts[out.weapon] or 0) + (out.mag and 5 or 0) + (out.suppressor and 4 or 0) + (out.knife and 3 or 0)
-	if cost > 32 then out.mag = false out.suppressor = false out.knife = false end
+	local out = {}
+
+	out.weapon = (data.weapon and traitorLoadoutCatalog[data.weapon] and traitorLoadoutCatalog[data.weapon].type == "weapon") and data.weapon or nil
+	out.mag = data.mag == true
+	out.suppressor = data.suppressor == true
+	out.laser = data.laser == true
+	out.melee = (data.melee and traitorLoadoutCatalog[data.melee] and traitorLoadoutCatalog[data.melee].type == "melee") and data.melee or nil
+	out.poison = (data.poison and traitorLoadoutCatalog[data.poison] and traitorLoadoutCatalog[data.poison].type == "poison") and data.poison or nil
+	out.trap = (data.trap and traitorLoadoutCatalog[data.trap] and traitorLoadoutCatalog[data.trap].type == "trap") and data.trap or nil
+	out.throw = (data.throw and traitorLoadoutCatalog[data.throw] and traitorLoadoutCatalog[data.throw].type == "throw") and data.throw or nil
+	out.bandage = data.bandage == true
+	out.morphine = data.morphine == true
+	out.adrenaline = data.adrenaline == true
+	out.suit = data.suit == true
+	out.walkie = data.walkie == true
+
+	if not out.weapon then out.mag = false out.suppressor = false out.laser = false end
+
+	local cost = 0
+	cost = cost + TraitorLoadoutItemCost(out, "weapon")
+	cost = cost + TraitorLoadoutItemCost(out, "mag")
+	cost = cost + TraitorLoadoutItemCost(out, "suppressor")
+	cost = cost + TraitorLoadoutItemCost(out, "laser")
+	cost = cost + TraitorLoadoutItemCost(out, "melee")
+	cost = cost + TraitorLoadoutItemCost(out, "poison")
+	cost = cost + TraitorLoadoutItemCost(out, "trap")
+	cost = cost + TraitorLoadoutItemCost(out, "throw")
+	cost = cost + TraitorLoadoutItemCost(out, "bandage")
+	cost = cost + TraitorLoadoutItemCost(out, "morphine")
+	cost = cost + TraitorLoadoutItemCost(out, "adrenaline")
+	cost = cost + TraitorLoadoutItemCost(out, "suit")
+	cost = cost + TraitorLoadoutItemCost(out, "walkie")
+
+	if cost > traitorLoadoutPoints then
+		out.mag = false out.suppressor = false out.laser = false
+		out.melee = nil out.poison = nil out.trap = nil out.throw = nil
+		out.bandage = false out.morphine = false out.adrenaline = false out.suit = false out.walkie = false
+	end
+
 	return out
 end
 
@@ -652,17 +704,30 @@ net.Receive("HMCD_TraitorLoadout", function(_, ply)
 	ply.HMCDTraitorLoadout = SanitizeTraitorLoadout(net.ReadTable())
 end)
 
-local function GiveTraitorLoadout(ply)
+function GiveTraitorLoadout(ply)
 	local data = SanitizeTraitorLoadout(ply.HMCDTraitorLoadout)
-	if not data.weapon and not data.knife then return end
-	local class = data.weapon == "usp" and "weapon_hk_usp" or "weapon_p22"
-	local sup = data.weapon == "usp" and "supressor3" or "supressor4"
-	local wep = data.weapon and ply:Give(class)
-	if IsValid(wep) then
-		if data.suppressor then hg.AddAttachmentForce(ply, wep, sup) end
-		if data.mag then timer.Simple(1, function() if IsValid(wep) then ply:GiveAmmo(wep:GetMaxClip1(), wep:GetPrimaryAmmoType(), true) end end) end
+	-- fallback default kit if nothing was selected
+	local nothing = not data.weapon and not data.melee and not data.poison and not data.trap
+		and not data.throw and not data.bandage and not data.morphine and not data.adrenaline and not data.suit and not data.walkie
+	if nothing then
+		data = {weapon = "usp", mag = true, melee = "pocketknife"}
 	end
-	if data.knife then ply:Give("weapon_pocketknife") end
+
+	if data.weapon then
+		local wep = ply:Give(traitorLoadoutCatalog[data.weapon].class)
+		if IsValid(wep) then
+			if data.suppressor then hg.AddAttachmentForce(ply, wep, traitorLoadoutSuppressors[data.weapon]) end
+			if data.laser then hg.AddAttachmentForce(ply, wep, "laser3") end
+			if data.mag then timer.Simple(1, function() if IsValid(wep) then ply:GiveAmmo(wep:GetMaxClip1(), wep:GetPrimaryAmmoType(), true) end end) end
+		end
+	end
+
+	for _, key in ipairs({"melee", "poison", "trap", "throw"}) do
+		if data[key] then ply:Give(traitorLoadoutCatalog[data[key]].class) end
+	end
+	for _, key in ipairs({"bandage", "morphine", "adrenaline", "suit", "walkie"}) do
+		if data[key] then ply:Give(traitorLoadoutCatalog[key].class) end
+	end
 end
 
 function MODE:GetPlySpawn(ply)
@@ -1780,7 +1845,8 @@ function MODE.SpawnPlayers(spawn_with_subroles)
                     net.WriteString(this_player.Profession or "")
                 net.Send(this_player)
                 
-                local role = MODE.Roles[MODE.Type][(this_player.isTraitor and "traitor") or (this_player.isGunner and "gunner") or "innocent"]
+                local roleTable = MODE.Roles[MODE.Type]
+                local role = roleTable and roleTable[(this_player.isTraitor and "traitor") or (this_player.isGunner and "gunner") or "innocent"]
                 if role then
                     zb.GiveRole(this_player, role.name, role.color)
                 end

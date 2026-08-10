@@ -452,6 +452,8 @@ MODE.Roles.supermario = {
 	},
 }
 
+MODE.Roles.danceofthedead = table.Copy(MODE.Roles.standard)
+
 function MODE.GetPlayerTraceToOther(ply, aim_vector, dist)
 	local trace = hg.eyeTrace(ply, dist, nil, aim_vector)
 	
