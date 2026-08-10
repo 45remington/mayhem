@@ -201,7 +201,9 @@ function SWEP:AnimZoom()
 	angZoom1[1] = self:IsZoom() and math.Clamp(angZoom1[1],-20,20) or 0
 
 	local rollTarget = angZoom1[1] * 0.6
-	if not self:IsPistolHoldType() then
+	if self:IsPistolHoldType() then
+		rollTarget = 0
+	else
 		rollTarget = -rollTarget
 	end
 	self.AimCameraRoll = Lerp(math.min(FrameTime() * 12, 1), self.AimCameraRoll or 0, rollTarget)
@@ -221,7 +223,7 @@ if CLIENT then
 		if hg_gopro and hg_gopro:GetBool() then return end
 
 		local wep = ply:GetActiveWeapon()
-		local validWep = IsValid(wep) and ishgweapon(wep) and wep.IsZoom and wep:IsZoom()
+		local validWep = IsValid(wep) and ishgweapon(wep) and wep.IsZoom and wep:IsZoom() and not wep:IsPistolHoldType()
 		local roll = validWep and aimCameraRollLerp or 0
 		if not validWep then
 			aimCameraRollLerp = Lerp(math.min(FrameTime() * 12, 1), aimCameraRollLerp or 0, 0)
